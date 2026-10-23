@@ -78,6 +78,7 @@ const els = {
   selectAll: document.getElementById("media-select-all"),
   attach: document.getElementById("media-attach"),
   download: document.getElementById("media-download"),
+  refresh: document.getElementById("media-refresh"),
 };
 
 let items = [];
@@ -217,10 +218,16 @@ els.attach.addEventListener("click", async () => {
   deps.done?.();
 });
 
-export async function renderMedia(d) {
+els.refresh.addEventListener("click", () => renderMedia(deps, { keepSelection: true }));
+
+// Scans the active tab. With keepSelection (refresh), ticked items that are still
+// on the page stay ticked.
+export async function renderMedia(d, { keepSelection = false } = {}) {
   deps = d;
+  const previous = new Set(keepSelection ? selected : []);
   selected.clear();
   items = [];
+  els.refresh.classList.add("spinning");
   streamed = false;
   pageTab = await ctx.activeTab();
   els.count.textContent = "Looking for media…";
@@ -236,8 +243,11 @@ export async function renderMedia(d) {
     }
   } catch {
     els.count.textContent = "This page can't be read by extensions.";
+    els.refresh.classList.remove("spinning");
     return;
   }
+  for (const m of items) if (previous.has(m.url)) selected.add(m.url);
+  setTimeout(() => els.refresh.classList.remove("spinning"), 300);
   // Biggest first: the photos you're after, not thumbnails.
   items.sort((a, b) => (b.type === "image") - (a.type === "image") || (b.w * b.h || 0) - (a.w * a.h || 0));
   draw();

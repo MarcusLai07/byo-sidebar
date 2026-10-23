@@ -169,34 +169,58 @@ function skillsSection(container, deps) {
 
 // ---------- downloads ----------
 
+// Redraws the downloads list whenever a download starts, progresses or finishes.
+let redrawDownloads = null;
+let pending = 0;
+const scheduleRedraw = () => {
+  clearTimeout(pending);
+  pending = setTimeout(() => redrawDownloads?.(), 250);
+};
+if (chrome.downloads?.onChanged) {
+  chrome.downloads.onCreated.addListener(scheduleRedraw);
+  chrome.downloads.onChanged.addListener(scheduleRedraw);
+  chrome.downloads.onErased?.addListener(scheduleRedraw);
+}
+
 function downloadsSection({ attach, toast }) {
   const list = el("div", { class: "download-list" }, el("p", { class: "hint" }, "Loading…"));
-  (async () => {
-    const items = await ctx.recentDownloads(12).catch(() => []);
+  const draw = async () => {
+    const items = await ctx.recentDownloads(12, { includeActive: true }).catch(() => []);
     if (!items.length) return list.replaceChildren(el("p", { class: "hint" }, "No recent PDFs, images or text downloads."));
     list.replaceChildren(
       ...items.map((d) =>
         el(
           "div",
-          { class: "download" },
-          el("div", {}, el("strong", {}, d.name), el("small", {}, [size(d.size), new Date(d.time).toLocaleDateString()].filter(Boolean).join(" · "))),
-          el("div", { class: "row-actions" },
-            el("button", { onclick: () => chrome.downloads.open(d.id) }, "Open"),
-            el("button", { class: "primary", onclick: async () => {
-              try {
-                attach(await ctx.fetchAttachment(d.url, d.name));
-                toast(`Attached ${d.name}`);
-              } catch (e) {
-                toast(e.message);
-              }
-            } }, "Attach")
-          )
+          { class: `download${d.active ? " active" : ""}` },
+          el("div", {},
+            el("strong", {}, d.name),
+            el("small", {}, d.active
+              ? `Downloading${d.progress != null ? ` ${Math.floor(d.progress * 100)}%` : "…"}`
+              : [size(d.size), new Date(d.time).toLocaleDateString()].filter(Boolean).join(" · "))),
+          d.active
+            ? null
+            : el("div", { class: "row-actions" },
+                el("button", { onclick: () => chrome.downloads.open(d.id) }, "Open"),
+                el("button", { class: "primary", onclick: async () => {
+                  try {
+                    attach(await ctx.fetchAttachment(d.url, d.name));
+                    toast(`Attached ${d.name}`);
+                  } catch (e) {
+                    toast(e.message);
+                  }
+                } }, "Attach"))
         )
       )
     );
-  })();
+    // Keep a running download's percentage moving even between change events.
+    if (items.some((d) => d.active)) setTimeout(() => redrawDownloads === draw && draw(), 1000);
+  };
+  redrawDownloads = draw;
+  draw();
   return [
-    el("p", { class: "hint" }, "Attach a recent download to your next message. Files are fetched again from where they came from."),
+    el("div", { class: "hint-row" },
+      el("p", { class: "hint" }, "Attach a recent download to your next message. The list updates as downloads finish."),
+      el("button", { class: "refresh", title: "Refresh", "aria-label": "Refresh downloads", onclick: draw }, "↻")),
     list,
   ];
 }

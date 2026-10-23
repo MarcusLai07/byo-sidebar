@@ -876,3 +876,28 @@ button.primary { background: var(--accent) !important; border-color: var(--accen
 
 .media-actions button:first-child { margin-right: auto; }
 .media-actions button:disabled { opacity: 0.45; cursor: default; }
+
+/* ---------- refresh buttons ---------- */
+
+.hint-row { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; }
+.hint-row .hint { flex: 1; }
+.media-title { display: inline-flex; gap: 6px; align-items: center; }
+
+button.refresh {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+button.refresh:hover { background: var(--surface); color: var(--fg); }
+button.refresh.spinning { animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.download.active small { color: var(--accent); }

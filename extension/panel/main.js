@@ -117,11 +117,7 @@ function showView(view) {
   if (state.view === "history") renderHistory({ onOpen: openChat, currentId: state.chat?.id });
   if (state.view === "info") showInfo();
   if (state.view === "media") {
-    renderMedia({
-      attach: addAttachment,
-      done: () => showView("media"), // back to the chat with the images attached
-      toast,
-    });
+    renderMedia(mediaDeps()); // "done" returns to the chat with the images attached
   }
 }
 
@@ -710,9 +706,14 @@ els.chip.addEventListener("click", () => {
   state.includePage = !state.includePage;
   refreshPageChip();
 });
-chrome.tabs.onActivated.addListener(refreshPageChip);
-chrome.tabs.onUpdated.addListener((_, info) => {
+const mediaDeps = () => ({ attach: addAttachment, done: () => showView("media"), toast });
+chrome.tabs.onActivated.addListener(() => {
+  refreshPageChip();
+  if (state.view === "media") renderMedia(mediaDeps()); // follow the tab you switched to
+});
+chrome.tabs.onUpdated.addListener(async (tabId, info) => {
   if (info.title || info.status === "complete") refreshPageChip();
+  if (info.status === "complete" && state.view === "media" && tabId === (await ctx.activeTab())?.id) renderMedia(mediaDeps(), { keepSelection: true });
 });
 
 function renderChips() {

@@ -270,14 +270,24 @@ export async function screenshot() {
 }
 
 // Recent finished downloads that can be attached.
-export async function recentDownloads(limit = 12) {
+// Recent downloads that can be attached; with { includeActive } also ones still downloading.
+export async function recentDownloads(limit = 12, { includeActive = false } = {}) {
   if (!chrome.downloads) return [];
-  const items = await chrome.downloads.search({ orderBy: ["-startTime"], state: "complete", limit: 50 });
+  const items = await chrome.downloads.search({ orderBy: ["-startTime"], limit: 60 });
   return items
-    .filter((d) => d.exists !== false)
-    .filter((d) => /pdf|image\/(png|jpe?g|gif|webp)|text|json|csv/.test(d.mime || "") || /\.(pdf|png|jpe?g|gif|webp|txt|md|csv|json)$/i.test(d.filename))
+    .filter((d) => (d.state === "complete" && d.exists !== false) || (includeActive && d.state === "in_progress"))
+    .filter((d) => /pdf|image\/(png|jpe?g|gif|webp)|text|json|csv/.test(d.mime || "") || /\.(pdf|png|jpe?g|gif|webp|txt|md|csv|json)$/i.test(d.filename || d.url))
     .slice(0, limit)
-    .map((d) => ({ id: d.id, name: d.filename.split("/").pop(), url: d.finalUrl || d.url, mime: d.mime, size: d.fileSize, time: d.startTime }));
+    .map((d) => ({
+      id: d.id,
+      name: (d.filename || d.finalUrl || d.url).split("/").pop().split("?")[0],
+      url: d.finalUrl || d.url,
+      mime: d.mime,
+      size: d.fileSize || d.totalBytes,
+      time: d.startTime,
+      active: d.state === "in_progress",
+      progress: d.totalBytes > 0 ? d.bytesReceived / d.totalBytes : null,
+    }));
 }
 
 // Jump the video/audio in a tab to `seconds` and play it (timestamp links).

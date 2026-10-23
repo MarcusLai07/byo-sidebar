@@ -98,6 +98,7 @@
     };
   }
 
+  window.__downloadItems = [{ id: 7, state: "complete", filename: "/Users/me/Downloads/logo.png", finalUrl: `${location.origin}/extension/icons/icon-128.png`, mime: "image/png", fileSize: 4200, startTime: new Date().toISOString(), exists: true }];
   const session = store("session");
   window.chrome = {
     runtime: {
@@ -167,8 +168,11 @@
     },
     downloads: {
       download: async (o) => (window.__downloads = (window.__downloads || []).concat(o)),
-      search: async () => [{ id: 7, filename: "/Users/me/Downloads/logo.png", finalUrl: `${location.origin}/extension/icons/icon-128.png`, mime: "image/png", fileSize: 4200, startTime: new Date().toISOString(), exists: true }],
+      search: async () => window.__downloadItems,
       open: () => {},
+      onCreated: listeners(),
+      onChanged: listeners(),
+      onErased: listeners(),
     },
   };
 })();
