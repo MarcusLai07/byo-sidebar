@@ -12,7 +12,8 @@ const provider = process.argv[3] || "claude-cli";
 const model = process.argv[4] || "haiku";
 const sessionId = crypto.randomUUID();
 let turn = 0;
-const host = spawn(path.join(__dirname, "byo-sidebar-host"), [], { stdio: ["pipe", "pipe", "inherit"] });
+const launcher = path.join(require("os").homedir(), "Library/Application Support/byo-sidebar/host/byo-sidebar-host");
+const host = spawn(launcher, [], { stdio: ["pipe", "pipe", "inherit"] });
 
 function post(msg) {
   const body = Buffer.from(JSON.stringify(msg));

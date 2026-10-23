@@ -37,10 +37,14 @@ Requires Node.js 18+. Set up at least one login CLI or API key from the table ab
    ```
 
 2. Open `dia://extensions` (or `chrome://extensions`), turn on **Developer mode**, click **Load unpacked**, and pick the `extension/` folder.
-3. Click the extension's toolbar icon or press **⌘⇧E**.
+3. Click the extension's toolbar icon, or set a shortcut in `dia://extensions/shortcuts`.
+
+   **Dia users:** to have ⌘E open this instead of Dia's chat, first move Dia's own shortcuts in Dia → Settings → Shortcuts. Change **Chat…** (⌘E) and **New Chat** (⇧⌘E) to something else, then give BYO Sidebar ⌘E.
 
 Test the router without the browser: `node host/test-host.js "hello" claude-cli haiku` (any provider id and model; it also checks that a follow-up remembers the first message).
 Remove it with `./host/uninstall.sh`.
+
+The installer copies the router to `~/Library/Application Support/byo-sidebar/host`, because macOS stops browsers from launching programs inside `~/Documents`, `~/Desktop` or `~/Downloads`. Re-run it after pulling updates. If the panel says it can't reach the router, check `~/Library/Logs/byo-sidebar/host.log`.
 
 ## How it works
 

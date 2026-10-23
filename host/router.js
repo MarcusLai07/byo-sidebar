@@ -9,6 +9,14 @@ const config = require("./config");
 
 const running = new Map(); // request id -> cancel()
 
+// stdout carries the protocol, so diagnostics go to stderr (the launcher appends it to a log file).
+const log = (...args) => console.error(new Date().toISOString(), ...args);
+log(`router started (pid ${process.pid}, node ${process.version})`);
+process.on("uncaughtException", (e) => {
+  log("crash:", e.stack || e);
+  process.exit(1);
+});
+
 function send(msg, then) {
   const body = Buffer.from(JSON.stringify(msg), "utf8");
   const header = Buffer.alloc(4);
