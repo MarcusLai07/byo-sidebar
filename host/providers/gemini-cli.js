@@ -6,6 +6,7 @@ const os = require("os");
 const path = require("path");
 const { exists, runJsonl } = require("./cli");
 const { SYSTEM_PROMPT } = require("./prompt");
+const { withTranscript } = require("./http");
 
 const BIN = process.env.BYO_GEMINI_BIN || "gemini";
 
@@ -32,7 +33,12 @@ module.exports = {
     { id: "flash", label: "Gemini Flash" },
   ],
 
-  chat({ model, sessionId, resume, prompt }, callbacks) {
+  chat(req, callbacks) {
+    const { model, sessionId, resume } = req;
+    if (req.attachments?.length) {
+      callbacks.error("Gemini login can't take attachments yet. Use a Gemini API key for images and PDFs.");
+      return () => {};
+    }
     const args = [
       "--output-format", "stream-json",
       "--approval-mode", "plan",
@@ -42,7 +48,7 @@ module.exports = {
       // The prompt comes in on stdin; -p "" just switches on headless mode.
       "-p", "",
     ];
-    const input = resume ? prompt : `${SYSTEM_PROMPT}\n\n${prompt}`;
+    const input = resume ? req.prompt : `${SYSTEM_PROMPT}\n\n${withTranscript(req)}`;
 
     return runJsonl(BIN, args, { stdin: input }, (ev, { delta, done, error }) => {
       if (ev.type === "message" && ev.role === "assistant" && ev.content) delta(ev.content);

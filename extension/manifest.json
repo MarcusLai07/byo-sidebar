@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BYO Sidebar",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Your own AI chat sidebar: pick the model, use your API key or your existing CLI login.",
   "icons": {
     "16": "icons/icon-16.png",
@@ -13,9 +13,12 @@
   "permissions": [
     "sidePanel",
     "tabs",
+    "tabGroups",
     "scripting",
     "storage",
-    "nativeMessaging"
+    "nativeMessaging",
+    "contextMenus",
+    "downloads"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -38,5 +41,8 @@
     "_execute_action": {
       "description": "Open BYO Sidebar"
     }
+  },
+  "omnibox": {
+    "keyword": "ai"
   }
 }

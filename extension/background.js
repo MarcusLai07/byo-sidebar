@@ -1,4 +1,4 @@
-// Open the panel when the toolbar icon (or Cmd+Shift+E) is used.
+// Open the panel when the toolbar icon (or your shortcut) is used.
 // Browsers without a working chrome.sidePanel get a docked popup window instead.
 if (chrome.sidePanel?.setPanelBehavior) {
   chrome.sidePanel
@@ -19,6 +19,51 @@ chrome.tabs.onUpdated.addListener(async (tabId, info) => {
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   const { mediaTabs = [] } = await chrome.storage.session.get("mediaTabs");
   if (mediaTabs.includes(tabId)) chrome.storage.session.set({ mediaTabs: mediaTabs.filter((t) => t !== tabId) });
+});
+
+// ---------- right-click menu ----------
+
+const MENU = [
+  { id: "ask-selection", title: "Ask about “%s”", contexts: ["selection"] },
+  { id: "skill:explain", title: "Explain", contexts: ["selection"] },
+  { id: "skill:copyedit", title: "Copy edit", contexts: ["selection"] },
+  { id: "skill:translate", title: "Translate to English", contexts: ["selection"] },
+  { id: "skill:summarize", title: "Summarize this page", contexts: ["page"] },
+  { id: "ask-image", title: "Ask about this image", contexts: ["image"] },
+];
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({ id: "byo", title: "BYO Sidebar", contexts: ["selection", "page", "image"] });
+    for (const item of MENU) chrome.contextMenus.create({ ...item, parentId: "byo" });
+  });
+});
+
+// The panel picks this up when it opens (or right away if it's already open).
+function hand(action) {
+  return chrome.storage.session.set({ pendingAction: { ...action, at: Date.now() } });
+}
+
+// sidePanel.open() must run synchronously inside the click, before any await.
+function openPanel(windowId) {
+  if (chrome.sidePanel?.open) chrome.sidePanel.open({ windowId }).catch(openWindow);
+  else openWindow();
+}
+
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  openPanel(tab.windowId);
+  const id = String(info.menuItemId);
+  if (id === "ask-selection") hand({ kind: "selection", selection: info.selectionText });
+  else if (id === "ask-image") hand({ kind: "image", srcUrl: info.srcUrl });
+  else if (id.startsWith("skill:")) hand({ kind: "skill", skillId: id.slice(6), selection: info.selectionText });
+});
+
+// ---------- address bar: type "ai", a space, and a question ----------
+
+chrome.omnibox.setDefaultSuggestion({ description: "Ask BYO Sidebar: %s" });
+chrome.omnibox.onInputEntered.addListener((text) => {
+  openPanel(chrome.windows.WINDOW_ID_CURRENT);
+  hand({ kind: "ask", text });
 });
 
 async function openWindow() {

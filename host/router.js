@@ -69,6 +69,8 @@ async function handle(msg) {
     }
     const cancel = provider.chat(msg, {
       delta: (text) => send({ type: "delta", id: msg.id, text }),
+      // Providers that pick their own session id (Codex) report it so the panel can store it.
+      session: (value) => send({ type: "session", id: msg.id, value }),
       done: () => {
         running.delete(msg.id);
         send({ type: "done", id: msg.id });

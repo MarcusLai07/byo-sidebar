@@ -2,7 +2,7 @@
 // so one implementation covers all three API-key providers.
 
 const config = require("../config");
-const { sse, failure, history, run } = require("./http");
+const { sse, failure, openaiContent, history, run } = require("./http");
 const { SYSTEM_PROMPT } = require("./prompt");
 
 // Chat-capable models only; these APIs also list embedding, audio, image and dated snapshot models.
@@ -36,32 +36,27 @@ function make({ id, label, keyName, baseUrl, filter = () => true }) {
       return cachedModels;
     },
 
-    chat({ model, sessionId, resume, prompt }, callbacks) {
-      const messages = history(sessionId, resume);
-      messages.push({ role: "user", content: prompt });
+    chat(req, callbacks) {
+      const messages = [
+        { role: "system", content: SYSTEM_PROMPT },
+        ...history(req),
+        { role: "user", content: openaiContent(req) },
+      ];
 
-      return run(
-        async function* (signal) {
-          const res = await fetch(`${baseUrl}/chat/completions`, {
-            method: "POST",
-            headers: headers(),
-            signal,
-            body: JSON.stringify({
-              model,
-              messages: [{ role: "system", content: SYSTEM_PROMPT }, ...messages],
-              stream: true,
-            }),
-          });
-          if (!res.ok) throw new Error(await failure(res));
-          for await (const ev of sse(res)) {
-            if (ev.error) throw new Error(ev.error.message || "Stream error");
-            const text = ev.choices?.[0]?.delta?.content;
-            if (text) yield text;
-          }
-        },
-        callbacks,
-        (text) => messages.push({ role: "assistant", content: text })
-      );
+      return run(async function* (signal) {
+        const res = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: headers(),
+          signal,
+          body: JSON.stringify({ model: req.model, messages, stream: true }),
+        });
+        if (!res.ok) throw new Error(await failure(res));
+        for await (const ev of sse(res)) {
+          if (ev.error) throw new Error(ev.error.message || "Stream error");
+          const text = ev.choices?.[0]?.delta?.content;
+          if (text) yield text;
+        }
+      }, callbacks);
     },
   };
 }

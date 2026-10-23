@@ -3,6 +3,7 @@
 
 const { exists, output, runJsonl } = require("./cli");
 const { SYSTEM_PROMPT } = require("./prompt");
+const { anthropicContent, withTranscript } = require("./http");
 
 const BIN = process.env.BYO_CLAUDE_BIN || "claude";
 
@@ -31,9 +32,12 @@ module.exports = {
     { id: "haiku", label: "Claude Haiku" },
   ],
 
-  chat({ model, sessionId, resume, prompt }, callbacks) {
+  chat(req, callbacks) {
+    const { model, sessionId, resume } = req;
     const args = [
       "-p",
+      // stream-json input lets us send images and PDFs as content blocks.
+      "--input-format", "stream-json",
       "--output-format", "stream-json",
       "--include-partial-messages",
       "--verbose",
@@ -44,8 +48,10 @@ module.exports = {
       "--model", model,
       ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
     ];
+    const content = anthropicContent({ ...req, prompt: withTranscript(req) });
+    const stdin = JSON.stringify({ type: "user", message: { role: "user", content } }) + "\n";
 
-    return runJsonl(BIN, args, { stdin: prompt }, (ev, { delta, done, error }) => {
+    return runJsonl(BIN, args, { stdin }, (ev, { delta, done, error }) => {
       const d = ev.type === "stream_event" && ev.event?.type === "content_block_delta" && ev.event.delta;
       if (d?.type === "text_delta") delta(d.text);
       if (ev.type === "result") {

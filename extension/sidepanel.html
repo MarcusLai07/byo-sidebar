@@ -10,50 +10,67 @@
 <body>
   <header>
     <select id="model" title="Model"></select>
-    <button id="new-chat" title="New chat">New chat</button>
-    <button id="keys-toggle" title="Models and API keys">Keys</button>
+    <button id="new-chat" class="icon" title="New chat" aria-label="New chat">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>
+    </button>
+    <button id="history-btn" class="icon" title="Chat history" aria-label="Chat history">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2"/></svg>
+    </button>
+    <button id="info-btn" class="icon" title="Models, skills & guide" aria-label="Models, skills and guide">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 9v5M10 6.2v.1"/></svg>
+    </button>
   </header>
 
-  <section id="settings" hidden>
-    <h2>API keys</h2>
-    <p class="hint">Stored only on this Mac in <code>~/.config/byo-sidebar/config.json</code>. Leave blank and save to remove.</p>
-    <form class="key-row" data-name="anthropic"><label>Anthropic</label><input type="password" placeholder="sk-ant-..." autocomplete="off"><button>Save</button></form>
-    <form class="key-row" data-name="openai"><label>OpenAI</label><input type="password" placeholder="sk-..." autocomplete="off"><button>Save</button></form>
-    <form class="key-row" data-name="gemini"><label>Gemini</label><input type="password" placeholder="AIza..." autocomplete="off"><button>Save</button></form>
-    <form class="key-row" data-name="deepseek"><label>DeepSeek</label><input type="password" placeholder="sk-..." autocomplete="off"><button>Save</button></form>
-
-    <h2>Login providers</h2>
-    <p class="hint">Use an account you're already signed in to, with no key. Nothing is used until you connect it here. Disconnecting only stops this sidebar using it; you stay signed in to the CLI.</p>
-    <div id="login-status"></div>
+  <section id="history-view" class="view" hidden>
+    <input id="history-search" type="search" placeholder="Search chats…" autocomplete="off">
+    <div id="history-list"></div>
   </section>
+
+  <section id="info-view" class="view" hidden></section>
 
   <main id="messages">
     <div class="empty" id="empty">
       <p>Ask anything about the page you're on.</p>
+      <div class="suggestions">
+        <button data-skill="summarize">Summarize this page</button>
+        <button data-skill="actions">Action items</button>
+        <button data-skill="timestamps">Timestamps for this video</button>
+      </div>
+      <p class="hint">Type <kbd>/</kbd> for skills, <kbd>@</kbd> to add tabs.</p>
     </div>
   </main>
 
   <div id="banner" class="banner" hidden></div>
+  <div id="toast" class="toast" hidden></div>
 
   <section id="media" hidden>
     <div id="media-list"></div>
   </section>
 
   <footer>
-    <div class="context-row">
+    <div id="chips" class="context-row">
       <button id="context-chip" class="chip" title="Include the current tab in your next message">
         <img id="context-icon" alt="">
         <span id="context-title">No tab</span>
       </button>
     </div>
+    <div id="popover" class="popover" role="listbox" hidden></div>
+    <div id="attach-menu" class="popover" hidden></div>
+    <div id="edit-note" class="edit-note" hidden>Editing a message: sending replaces it and everything after. <button id="cancel-edit">Cancel</button></div>
     <form id="composer">
-      <textarea id="input" rows="1" placeholder="Ask another question..." autofocus></textarea>
-      <button id="send" type="submit" title="Send">↑</button>
+      <button type="button" id="attach" class="icon" title="Attach a file, screenshot or download" aria-label="Attach">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>
+      </button>
+      <textarea id="input" rows="1" placeholder="Ask, / for skills, @ for tabs" autofocus></textarea>
+      <button type="button" id="mic" class="icon" title="Voice input" aria-label="Voice input">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7.5" y="3" width="5" height="9" rx="2.5"/><path d="M5 10a5 5 0 0 0 10 0M10 15v2.5"/></svg>
+      </button>
+      <button id="send" type="submit" title="Send" aria-label="Send">↑</button>
     </form>
+    <input id="file-input" type="file" multiple hidden accept="image/*,application/pdf,text/*,.md,.csv,.json">
   </footer>
 
-  <script src="markdown.js"></script>
-  <script src="sidepanel.js"></script>
   <script src="media.js"></script>
+  <script type="module" src="panel/main.js"></script>
 </body>
 </html>
