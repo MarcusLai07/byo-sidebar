@@ -241,11 +241,36 @@
     }
   }
 
+  // Tabs only join the strip once they make sound, and that list is lost when the
+  // extension reloads or the browser restarts. So on open, also look for tabs whose
+  // video or audio has already been played (now paused) and add them.
+  function playedScript() {
+    return [...document.querySelectorAll("video, audio")].some((m) => (m.currentSrc || m.srcObject) && m.currentTime > 1);
+  }
+
+  async function discover() {
+    const tabs = (await chrome.tabs.query({})).filter((t) => /^https?:/.test(t.url || "") && !t.discarded).slice(0, 60);
+    const found = await Promise.all(
+      tabs.map(async (t) => {
+        if (tracked.has(t.id)) return null;
+        const results = await chrome.scripting
+          .executeScript({ target: { tabId: t.id, allFrames: true }, func: playedScript })
+          .catch(() => []);
+        return results.some((r) => r.result) ? t.id : null;
+      })
+    );
+    const ids = found.filter((id) => id != null);
+    if (!ids.length) return;
+    const { mediaTabs = [] } = await chrome.storage.session.get("mediaTabs");
+    await chrome.storage.session.set({ mediaTabs: [...new Set([...mediaTabs, ...ids])] });
+  }
+
   async function init() {
     els.root = document.getElementById("media");
     els.list = document.getElementById("media-list");
     const { mediaTabs = [] } = await chrome.storage.session.get("mediaTabs");
     tracked = new Set(mediaTabs);
+    discover();
     chrome.storage.session.onChanged.addListener((changes) => {
       if (changes.mediaTabs) {
         tracked = new Set(changes.mediaTabs.newValue || []);
