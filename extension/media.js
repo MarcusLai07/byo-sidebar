@@ -128,18 +128,22 @@
   }
 
   async function act(player, action, value) {
-    const target = { tabId: player.tab.id, frameIds: player.frameId != null ? [player.frameId] : undefined };
-    if (action === "mute") {
-      await chrome.tabs.update(player.tab.id, { muted: !player.tab.mutedInfo?.muted });
-    } else if (action === "focus") {
-      await chrome.tabs.update(player.tab.id, { active: true });
-      await chrome.windows.update(player.tab.windowId, { focused: true });
-    } else if (action === "dismiss") {
-      dismissed.add(player.tab.id);
-    } else {
-      await chrome.scripting
-        .executeScript({ target, world: "MAIN", func: control, args: [ADAPTERS, action, value] })
-        .catch(() => {});
+    const target = { tabId: player.tab.id, ...(player.frameId != null && { frameIds: [player.frameId] }) };
+    try {
+      if (action === "mute") {
+        await chrome.tabs.update(player.tab.id, { muted: !player.tab.mutedInfo?.muted });
+      } else if (action === "focus") {
+        await chrome.tabs.update(player.tab.id, { active: true });
+        await chrome.windows.update(player.tab.windowId, { focused: true });
+      } else if (action === "dismiss") {
+        dismissed.add(player.tab.id);
+      } else {
+        // Script arguments must be JSON-serializable: `undefined` makes executeScript throw
+        // before it even returns a promise, which is why only mute used to work.
+        await chrome.scripting.executeScript({ target, world: "MAIN", func: control, args: [ADAPTERS, action, value ?? null] });
+      }
+    } catch (e) {
+      console.warn("BYO Sidebar media control failed:", action, e);
     }
     setTimeout(refresh, 150);
   }

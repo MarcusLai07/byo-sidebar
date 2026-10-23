@@ -17,7 +17,10 @@ window.chrome={
   storage:{session:{get:async()=>({mediaTabs:[1]}),onChanged:{addListener(){}}}},
   tabs:{query:async()=>[tab],get:async()=>tab,update:async(id,u)=>{log.push(["tabs.update",u]);if("muted"in u)tab.mutedInfo.muted=u.muted;},onUpdated:{addListener(){}},onRemoved:{addListener(){}}},
   windows:{update:async(...a)=>log.push(["windows.update",a])},
-  scripting:{executeScript:async({func,args})=>[{frameId:0,result:func(...args)}]},
+  scripting:{executeScript:({func,args=[]})=>{
+    // Like the real API: arguments must be JSON-serializable, or it throws synchronously.
+    if (args.some((a)=>a===undefined)) throw new TypeError("Error at parameter 'injection': Value is unserializable.");
+    return Promise.resolve([{frameId:0,result:func(...args)}]);}},
 };
 </script>
 <script src="../extension/media.js"></script>
