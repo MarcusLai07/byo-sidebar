@@ -21,7 +21,7 @@ const GUIDE = [
   ["Address bar", "Type ai, a space, then your question in the address bar."],
   ["Edit & regenerate", "Hover a message to edit your question or regenerate the answer. You can switch models mid-chat."],
   ["History", "Every chat is saved on this Mac. Open the clock to search and reopen them."],
-  ["Media strip", "Tabs playing audio or video get a mini player above the box: play/pause, skip, seek, mute."],
+  ["Media strip", "Tabs playing (or paused) audio or video get a mini player above the box: play/pause, skip, seek, mute. Two or more show side by side. ⌄ minimizes them to small tabs; click one to open just that player. ✕ pauses it and hides it until it plays again."],
   ["Shortcut", "Set a keyboard shortcut in your browser's extensions → Keyboard shortcuts page. In Dia, move Dia's own Chat shortcut first (Settings → Shortcuts)."],
   ["Browsing", "The chat can read your other tabs, follow links (opened in a background tab and closed after) and load more YouTube comments when it needs more to answer. Read-only: it never clicks or types. Turn it off under Models & keys."],
   ["Voice", "Click the mic to dictate. Some browsers don't include speech recognition."],

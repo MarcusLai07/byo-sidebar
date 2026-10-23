@@ -316,9 +316,60 @@ main, .view {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 210px;
+  max-height: 260px;
   overflow-y: auto;
 }
+
+.media-strip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.media-toggle {
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.media-toggle:hover { background: var(--surface); color: var(--fg); }
+
+.media-cards { display: flex; flex-direction: column; gap: 6px; }
+.media-cards.two { display: grid; grid-template-columns: 1fr 1fr; }
+
+/* Two-column cards: title on top, controls underneath. */
+.player.compact { grid-template-columns: 28px 1fr; gap: 4px 6px; padding: 6px; }
+.player.compact .art { width: 28px; height: 28px; }
+.player.compact .controls { grid-column: 1 / -1; justify-content: space-between; }
+.player.compact .controls button { width: 24px; height: 22px; font-size: 12px; }
+
+.media-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.media-pill {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  max-width: calc(50% - 3px);
+  padding: 3px 10px 3px 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.media-pill img { width: 20px; height: 20px; flex-shrink: 0; object-fit: cover; border-radius: 50%; background: var(--border); }
+.media-pill img:not([src]) { visibility: hidden; }
+.media-pill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.media-pill.on { border-color: var(--accent); }
+.media-pill.playing img { box-shadow: 0 0 0 2px var(--accent); }
 
 .player {
   display: grid;

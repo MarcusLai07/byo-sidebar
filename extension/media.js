@@ -63,6 +63,16 @@
       .filter((m) => m.currentSrc || m.srcObject)
       .sort((a, b) => (a.paused - b.paused) || (b.currentTime > 0) - (a.currentTime > 0) || (b.duration || 0) - (a.duration || 0))[0];
 
+    if (action === "pause") {
+      // Pause only (never resumes): used when a player is closed from the strip.
+      if (media && !media.paused) {
+        media.pause();
+        return true;
+      }
+      const toggleEl = !media && site.toggle && document.querySelector(site.toggle);
+      if (toggleEl && /pause/i.test(toggleEl.getAttribute("aria-label") || toggleEl.title || "")) toggleEl.click();
+      return true;
+    }
     if (action === "next") return click(site.next);
     if (action === "prev") return click(site.prev);
     if (action === "toggle") {
@@ -90,6 +100,16 @@
   let tracked = new Set(); // tabs that have played sound (from the background worker)
   let dismissed = new Set(); // tabs the user closed in the strip; they return if they play again
   let timer = null;
+  // Minimized: players shrink to small tabs; clicking one expands just that player.
+  let collapsed = (() => {
+    try {
+      return localStorage.getItem("mediaCollapsed") === "1";
+    } catch {
+      return false;
+    }
+  })();
+  let focusId = null; // tab id of the player expanded while minimized
+  let lastPlayers = [];
 
   async function run(tabId, func, args) {
     try {
@@ -136,7 +156,10 @@
         await chrome.tabs.update(player.tab.id, { active: true });
         await chrome.windows.update(player.tab.windowId, { focused: true });
       } else if (action === "dismiss") {
+        // Closing a player pauses it too; it comes back if it plays again.
         dismissed.add(player.tab.id);
+        if (focusId === player.tab.id) focusId = null;
+        await chrome.scripting.executeScript({ target, world: "MAIN", func: control, args: [ADAPTERS, "pause", null] });
       } else {
         // Script arguments must be JSON-serializable: `undefined` makes executeScript throw
         // before it even returns a promise, which is why only mute used to work.
@@ -169,67 +192,126 @@
     return b;
   }
 
-  function render(players) {
-    els.root.hidden = players.length === 0;
-    els.list.replaceChildren(
-      ...players.map((p) => {
-        const { tab, state } = p;
-        const card = document.createElement("div");
-        card.className = "player";
-        card.title = "Go to tab";
-        card.addEventListener("click", () => act(p, "focus"));
+  function setCollapsed(on) {
+    collapsed = on;
+    focusId = null;
+    try {
+      localStorage.setItem("mediaCollapsed", on ? "1" : "0");
+    } catch {}
+    render(lastPlayers);
+  }
 
-        const art = document.createElement("img");
-        art.className = "art";
-        art.alt = "";
-        const artSrc = state.artwork || tab.favIconUrl;
-        if (artSrc) art.src = artSrc;
+  // One player as a card. `compact` stacks the controls under the title for the
+  // two-column layout.
+  function card(p, compact) {
+    const { tab, state } = p;
+    const el = document.createElement("div");
+    el.className = `player${compact ? " compact" : ""}`;
+    el.title = "Go to tab";
+    el.addEventListener("click", () => act(p, "focus"));
 
-        const info = document.createElement("div");
-        info.className = "info";
-        const title = document.createElement("div");
-        title.className = "title";
-        title.textContent = state.title || tab.title || "Untitled";
-        const sub = document.createElement("div");
-        sub.className = "sub";
-        const host = new URL(tab.url).hostname.replace(/^www\./, "");
-        sub.textContent = [state.artist || host, state.duration ? `${fmt(state.currentTime)} / ${fmt(state.duration)}` : ""]
-          .filter(Boolean)
-          .join(" · ");
-        info.append(title, sub);
+    const art = document.createElement("img");
+    art.className = "art";
+    art.alt = "";
+    const artSrc = state.artwork || tab.favIconUrl;
+    if (artSrc) art.src = artSrc;
 
-        const controls = document.createElement("div");
-        controls.className = "controls";
-        const canToggle = state.hasElement || state.title || state.score > 0;
-        if (state.canPrev) controls.append(button("⏮", "Previous", () => act(p, "prev")));
-        else if (state.hasElement) controls.append(button("↺", "Back 10 seconds", () => act(p, "skip", -10)));
-        controls.append(button(state.paused ? "▶" : "⏸", state.paused ? "Play" : "Pause", () => act(p, "toggle"), !canToggle));
-        if (state.canNext) controls.append(button("⏭", "Next", () => act(p, "next")));
-        else if (state.hasElement) controls.append(button("↻", "Forward 10 seconds", () => act(p, "skip", 10)));
-        controls.append(
-          button(tab.mutedInfo?.muted ? "🔇" : "🔊", tab.mutedInfo?.muted ? "Unmute tab" : "Mute tab", () => act(p, "mute")),
-          button("✕", "Hide from this list", () => act(p, "dismiss"))
-        );
+    const info = document.createElement("div");
+    info.className = "info";
+    const title = document.createElement("div");
+    title.className = "title";
+    title.textContent = state.title || tab.title || "Untitled";
+    const sub = document.createElement("div");
+    sub.className = "sub";
+    const host = new URL(tab.url).hostname.replace(/^www\./, "");
+    sub.textContent = [state.artist || host, state.duration ? `${fmt(state.currentTime)} / ${fmt(state.duration)}` : ""]
+      .filter(Boolean)
+      .join(" · ");
+    info.append(title, sub);
 
-        card.append(art, info, controls);
-
-        if (state.duration) {
-          const bar = document.createElement("div");
-          bar.className = "progress";
-          bar.title = "Seek";
-          const fill = document.createElement("div");
-          fill.style.width = `${(100 * (state.currentTime || 0)) / state.duration}%`;
-          bar.append(fill);
-          bar.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const r = bar.getBoundingClientRect();
-            act(p, "seek", ((e.clientX - r.left) / r.width) * state.duration);
-          });
-          card.append(bar);
-        }
-        return card;
-      })
+    const controls = document.createElement("div");
+    controls.className = "controls";
+    const canToggle = state.hasElement || state.title || state.score > 0;
+    if (state.canPrev) controls.append(button("⏮", "Previous", () => act(p, "prev")));
+    else if (state.hasElement) controls.append(button("↺", "Back 10 seconds", () => act(p, "skip", -10)));
+    controls.append(button(state.paused ? "▶" : "⏸", state.paused ? "Play" : "Pause", () => act(p, "toggle"), !canToggle));
+    if (state.canNext) controls.append(button("⏭", "Next", () => act(p, "next")));
+    else if (state.hasElement) controls.append(button("↻", "Forward 10 seconds", () => act(p, "skip", 10)));
+    controls.append(
+      button(tab.mutedInfo?.muted ? "🔇" : "🔊", tab.mutedInfo?.muted ? "Unmute tab" : "Mute tab", () => act(p, "mute")),
+      button("✕", "Pause and hide", () => act(p, "dismiss"))
     );
+
+    el.append(art, info, controls);
+
+    if (state.duration) {
+      const bar = document.createElement("div");
+      bar.className = "progress";
+      bar.title = "Seek";
+      const fill = document.createElement("div");
+      fill.style.width = `${(100 * (state.currentTime || 0)) / state.duration}%`;
+      bar.append(fill);
+      bar.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const r = bar.getBoundingClientRect();
+        act(p, "seek", ((e.clientX - r.left) / r.width) * state.duration);
+      });
+      el.append(bar);
+    }
+    return el;
+  }
+
+  // A minimized player: artwork, title and whether it's playing.
+  function pill(p) {
+    const { tab, state } = p;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `media-pill${focusId === tab.id ? " on" : ""}${state.paused ? "" : " playing"}`;
+    b.title = state.title || tab.title || "";
+    const art = document.createElement("img");
+    art.alt = "";
+    const artSrc = state.artwork || tab.favIconUrl;
+    if (artSrc) art.src = artSrc;
+    const name = document.createElement("span");
+    name.textContent = state.title || tab.title || "Untitled";
+    b.append(art, name);
+    b.addEventListener("click", () => {
+      focusId = focusId === tab.id ? null : tab.id;
+      render(lastPlayers);
+    });
+    return b;
+  }
+
+  function render(players) {
+    lastPlayers = players;
+    els.root.hidden = players.length === 0;
+    if (!players.length) return els.list.replaceChildren();
+    if (focusId != null && !players.some((p) => p.tab.id === focusId)) focusId = null;
+
+    const head = document.createElement("div");
+    head.className = "media-strip-head";
+    const label = document.createElement("span");
+    const playing = players.filter((p) => !p.state.paused).length;
+    label.textContent = `${players.length} player${players.length === 1 ? "" : "s"}${playing ? ` · ${playing} playing` : ""}`;
+    const toggle = button(collapsed ? "⌃" : "⌄", collapsed ? "Show all players" : "Minimize", () => setCollapsed(!collapsed));
+    toggle.className = "media-toggle";
+    head.append(label, toggle);
+
+    const body = [];
+    if (collapsed) {
+      const focused = players.find((p) => p.tab.id === focusId);
+      if (focused) body.push(card(focused, false));
+      const pills = document.createElement("div");
+      pills.className = "media-pills";
+      pills.append(...players.map(pill));
+      body.push(pills);
+    } else {
+      const grid = document.createElement("div");
+      grid.className = players.length > 1 ? "media-cards two" : "media-cards";
+      grid.append(...players.map((p) => card(p, players.length > 1)));
+      body.push(grid);
+    }
+    els.list.replaceChildren(head, ...body);
   }
 
   function schedule() {

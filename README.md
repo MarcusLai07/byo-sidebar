@@ -11,7 +11,7 @@ Bring your own AI to your browser's sidebar. A Chromium extension (built for peo
 - **Read-only browsing:** when it needs more to answer, the chat can list and read your tabs, open links in a background tab (closed afterwards) and load more YouTube comments. It never clicks, types or submits. Links that haven't appeared in the chat or in pages it read ask you first, so a page can't trick it into sending your data somewhere. Works with Claude Code and API-key models; turn it off in ⓘ → Models & keys.
 - **Right-click and address bar:** select text → right-click → BYO Sidebar to explain, translate or copy-edit it, or ask about an image. Type `ai` + space in the address bar to ask from there.
 - **Voice input** where the browser supports speech recognition.
-- **Media strip:** an Arc-style mini player for every tab that's played sound this session (play/pause, next/previous or ±10s, seek, mute, jump to tab). Next/previous use the site's own buttons on YouTube, YouTube Music, Spotify and SoundCloud.
+- **Media strip:** an Arc-style mini player for every tab with audio or video (play/pause, next/previous or ±10s, seek, mute, jump to tab), in two columns when there's more than one. Minimize it to small tabs and click one to open just that player; ✕ pauses and hides a player. Next/previous use the site's own buttons on YouTube, YouTube Music, Spotify and SoundCloud.
 - **No API key needed for Claude:** it can use your signed-in [Claude Code](https://claude.com/claude-code) CLI, with all tools disabled.
 - Everything runs on your machine; questions go only to the model provider you pick.
 
