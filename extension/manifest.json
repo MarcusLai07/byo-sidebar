@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "BYO Sidebar",
+  "version": "0.1.0",
+  "description": "Your own AI chat sidebar: pick the model, use your API key or your existing CLI login.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwKwy3q6ML7ZLE2bvEssQZkTARoMO99SE30rSbKYLNDwg2xFEQ6qmXkDg3SzqL+JtShQ83DO4VVvayhDiG6895lWRy6dA3k5VeUK4TTrovNEQF4AdVG7gG/q785NPghdyTxYSjownx3uAWPkXMt9AW/LzMd3s8wI3HF/khINyIGO1CZTkfnMKTZf3HN0qqRqZhdfSa+oJcY/o4UmS06UClI4pla8PrPfMMuWLUGdaEsTHF1p8Mv0i+jsBfrqOrk2Ymzv67nvzCO+xCFuj0vkWmssGNiu+BafXt8dabmm1as1TCWD7/Gadne9iXkKXuODeARStMQUB/gpSRtmjWmiMtQIDAQAB",
+  "permissions": ["sidePanel", "tabs", "scripting", "storage", "nativeMessaging"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "action": { "default_title": "Open BYO Sidebar" },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Ctrl+Shift+E", "mac": "Command+Shift+E" }
+    }
+  }
+}

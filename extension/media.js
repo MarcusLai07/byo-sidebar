@@ -1,0 +1,260 @@
+// Media strip: an Arc-style mini player for every tab that's playing (or has played) media.
+// probe() and control() run inside the page (main world, every frame), so they must be self-contained.
+
+(function () {
+  // Sites whose own buttons do more than the <video>/<audio> element can (skip tracks,
+  // or players like Spotify that don't expose a normal media element).
+  const ADAPTERS = {
+    "www.youtube.com": { next: ".ytp-next-button", prev: ".ytp-prev-button" },
+    "music.youtube.com": { next: ".next-button", prev: ".previous-button", toggle: "#play-pause-button" },
+    "open.spotify.com": {
+      next: '[data-testid="control-button-skip-forward"]',
+      prev: '[data-testid="control-button-skip-back"]',
+      toggle: '[data-testid="control-button-playpause"]',
+    },
+    "soundcloud.com": { next: ".skipControl__next", prev: ".skipControl__previous", toggle: ".playControl" },
+  };
+
+  function probe(adapters) {
+    const site = adapters[location.hostname] || {};
+    // Present and enabled is enough: YouTube hides its next button in narrow players
+    // with display:none, but clicking it still works.
+    const usable = (sel) => {
+      const el = sel && document.querySelector(sel);
+      return !!el && !el.disabled && el.getAttribute("aria-disabled") !== "true";
+    };
+
+    // Prefer what's playing, then what has been played, then the longest thing on the page.
+    const media = [...document.querySelectorAll("video, audio")]
+      .filter((m) => m.currentSrc || m.srcObject)
+      .filter((m) => !(m.muted && m.currentTime === 0 && m.paused)) // hover previews, muted autoplay stubs
+      .sort((a, b) => (a.paused - b.paused) || (b.currentTime > 0) - (a.currentTime > 0) || (b.duration || 0) - (a.duration || 0))[0];
+
+    const meta = navigator.mediaSession?.metadata;
+    if (!media && !meta && !usable(site.toggle)) return null;
+
+    const art = meta?.artwork?.length ? meta.artwork[meta.artwork.length - 1].src : null;
+    const toggleEl = site.toggle && document.querySelector(site.toggle);
+    // Players without a media element: read paused state off their play button's label.
+    const labelPaused = toggleEl ? /play/i.test(toggleEl.getAttribute("aria-label") || toggleEl.title || "") : null;
+
+    return {
+      hasElement: !!media,
+      paused: media ? media.paused : labelPaused ?? navigator.mediaSession?.playbackState !== "playing",
+      currentTime: media && isFinite(media.currentTime) ? media.currentTime : null,
+      duration: media && isFinite(media.duration) ? media.duration : null,
+      title: meta?.title || null,
+      artist: meta?.artist || null,
+      artwork: art,
+      canNext: usable(site.next),
+      canPrev: usable(site.prev),
+      score: media ? (!media.paused ? 3 : media.currentTime > 0 ? 2 : 1) : meta ? 1 : 0,
+    };
+  }
+
+  function control(adapters, action, value) {
+    const site = adapters[location.hostname] || {};
+    const click = (sel) => {
+      const el = sel && document.querySelector(sel);
+      if (el) el.click();
+      return !!el;
+    };
+    const media = [...document.querySelectorAll("video, audio")]
+      .filter((m) => m.currentSrc || m.srcObject)
+      .sort((a, b) => (a.paused - b.paused) || (b.currentTime > 0) - (a.currentTime > 0) || (b.duration || 0) - (a.duration || 0))[0];
+
+    if (action === "next") return click(site.next);
+    if (action === "prev") return click(site.prev);
+    if (action === "toggle") {
+      if (site.toggle && click(site.toggle)) return true;
+      if (!media) return false;
+      if (media.paused) media.play().catch(() => {});
+      else media.pause();
+      return true;
+    }
+    if (action === "seek" && media && isFinite(media.duration)) {
+      media.currentTime = Math.max(0, Math.min(media.duration, value));
+      return true;
+    }
+    if (action === "skip" && media) {
+      media.currentTime = Math.max(0, media.currentTime + value);
+      return true;
+    }
+    return false;
+  }
+
+  // ---------- panel side ----------
+
+  const POLL_MS = 1000;
+  const els = {};
+  let tracked = new Set(); // tabs that have played sound (from the background worker)
+  let dismissed = new Set(); // tabs the user closed in the strip; they return if they play again
+  let timer = null;
+
+  async function run(tabId, func, args) {
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        world: "MAIN",
+        func,
+        args,
+      });
+      return results.map((r) => ({ frameId: r.frameId, value: r.result })).filter((r) => r.value != null);
+    } catch {
+      return []; // tab closed, discarded, or a page extensions can't touch
+    }
+  }
+
+  async function candidates() {
+    const audible = await chrome.tabs.query({ audible: true });
+    for (const t of audible) dismissed.delete(t.id);
+    const ids = new Set([...tracked, ...audible.map((t) => t.id)]);
+    const tabs = await Promise.all([...ids].map((id) => chrome.tabs.get(id).catch(() => null)));
+    return tabs.filter((t) => t && !dismissed.has(t.id) && /^https?:/.test(t.url || ""));
+  }
+
+  async function refresh() {
+    const tabs = await candidates();
+    const players = await Promise.all(
+      tabs.map(async (tab) => {
+        const frames = await run(tab.id, probe, [ADAPTERS]);
+        const best = frames.sort((a, b) => b.value.score - a.value.score)[0];
+        // Keep audible tabs even when nothing can be read (e.g. Web Audio), so they can still be muted.
+        if (!best && !tab.audible) return null;
+        return { tab, frameId: best?.frameId, state: best?.value || { paused: false, hasElement: false } };
+      })
+    );
+    render(players.filter(Boolean));
+  }
+
+  async function act(player, action, value) {
+    const target = { tabId: player.tab.id, frameIds: player.frameId != null ? [player.frameId] : undefined };
+    if (action === "mute") {
+      await chrome.tabs.update(player.tab.id, { muted: !player.tab.mutedInfo?.muted });
+    } else if (action === "focus") {
+      await chrome.tabs.update(player.tab.id, { active: true });
+      await chrome.windows.update(player.tab.windowId, { focused: true });
+    } else if (action === "dismiss") {
+      dismissed.add(player.tab.id);
+    } else {
+      await chrome.scripting
+        .executeScript({ target, world: "MAIN", func: control, args: [ADAPTERS, action, value] })
+        .catch(() => {});
+    }
+    setTimeout(refresh, 150);
+  }
+
+  const fmt = (s) => {
+    if (s == null) return "";
+    s = Math.floor(s);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = String(s % 60).padStart(2, "0");
+    return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+  };
+
+  function button(label, title, onClick, disabled) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.title = title;
+    b.disabled = !!disabled;
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      onClick();
+    });
+    return b;
+  }
+
+  function render(players) {
+    els.root.hidden = players.length === 0;
+    els.list.replaceChildren(
+      ...players.map((p) => {
+        const { tab, state } = p;
+        const card = document.createElement("div");
+        card.className = "player";
+        card.title = "Go to tab";
+        card.addEventListener("click", () => act(p, "focus"));
+
+        const art = document.createElement("img");
+        art.className = "art";
+        art.alt = "";
+        const artSrc = state.artwork || tab.favIconUrl;
+        if (artSrc) art.src = artSrc;
+
+        const info = document.createElement("div");
+        info.className = "info";
+        const title = document.createElement("div");
+        title.className = "title";
+        title.textContent = state.title || tab.title || "Untitled";
+        const sub = document.createElement("div");
+        sub.className = "sub";
+        const host = new URL(tab.url).hostname.replace(/^www\./, "");
+        sub.textContent = [state.artist || host, state.duration ? `${fmt(state.currentTime)} / ${fmt(state.duration)}` : ""]
+          .filter(Boolean)
+          .join(" · ");
+        info.append(title, sub);
+
+        const controls = document.createElement("div");
+        controls.className = "controls";
+        const canToggle = state.hasElement || state.title || state.score > 0;
+        if (state.canPrev) controls.append(button("⏮", "Previous", () => act(p, "prev")));
+        else if (state.hasElement) controls.append(button("↺", "Back 10 seconds", () => act(p, "skip", -10)));
+        controls.append(button(state.paused ? "▶" : "⏸", state.paused ? "Play" : "Pause", () => act(p, "toggle"), !canToggle));
+        if (state.canNext) controls.append(button("⏭", "Next", () => act(p, "next")));
+        else if (state.hasElement) controls.append(button("↻", "Forward 10 seconds", () => act(p, "skip", 10)));
+        controls.append(
+          button(tab.mutedInfo?.muted ? "🔇" : "🔊", tab.mutedInfo?.muted ? "Unmute tab" : "Mute tab", () => act(p, "mute")),
+          button("✕", "Hide from this list", () => act(p, "dismiss"))
+        );
+
+        card.append(art, info, controls);
+
+        if (state.duration) {
+          const bar = document.createElement("div");
+          bar.className = "progress";
+          bar.title = "Seek";
+          const fill = document.createElement("div");
+          fill.style.width = `${(100 * (state.currentTime || 0)) / state.duration}%`;
+          bar.append(fill);
+          bar.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const r = bar.getBoundingClientRect();
+            act(p, "seek", ((e.clientX - r.left) / r.width) * state.duration);
+          });
+          card.append(bar);
+        }
+        return card;
+      })
+    );
+  }
+
+  function schedule() {
+    clearInterval(timer);
+    timer = null;
+    if (document.visibilityState === "visible") {
+      refresh();
+      timer = setInterval(refresh, POLL_MS);
+    }
+  }
+
+  async function init() {
+    els.root = document.getElementById("media");
+    els.list = document.getElementById("media-list");
+    const { mediaTabs = [] } = await chrome.storage.session.get("mediaTabs");
+    tracked = new Set(mediaTabs);
+    chrome.storage.session.onChanged.addListener((changes) => {
+      if (changes.mediaTabs) {
+        tracked = new Set(changes.mediaTabs.newValue || []);
+        refresh();
+      }
+    });
+    chrome.tabs.onUpdated.addListener((_, info) => {
+      if ("audible" in info || "mutedInfo" in info || info.title) refresh();
+    });
+    chrome.tabs.onRemoved.addListener(refresh);
+    document.addEventListener("visibilitychange", schedule);
+    schedule();
+  }
+
+  init();
+})();

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BYO Sidebar</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header>
+    <select id="model" title="Model"></select>
+    <button id="new-chat" title="New chat">New chat</button>
+    <button id="keys-toggle" title="Models and API keys">Keys</button>
+  </header>
+
+  <section id="settings" hidden>
+    <h2>API keys</h2>
+    <p class="hint">Stored only on this Mac in <code>~/.config/byo-sidebar/config.json</code>. Leave blank and save to remove.</p>
+    <form class="key-row" data-name="anthropic"><label>Anthropic</label><input type="password" placeholder="sk-ant-..." autocomplete="off"><button>Save</button></form>
+    <form class="key-row" data-name="openai"><label>OpenAI</label><input type="password" placeholder="sk-..." autocomplete="off"><button>Save</button></form>
+    <form class="key-row" data-name="gemini"><label>Gemini</label><input type="password" placeholder="AIza..." autocomplete="off"><button>Save</button></form>
+    <form class="key-row" data-name="deepseek"><label>DeepSeek</label><input type="password" placeholder="sk-..." autocomplete="off"><button>Save</button></form>
+
+    <h2>Login providers</h2>
+    <p class="hint">No key needed. Install a CLI, sign in once, then re-run <code>host/install.sh</code>.</p>
+    <ul id="login-status"></ul>
+  </section>
+
+  <main id="messages">
+    <div class="empty" id="empty">
+      <p>Ask anything about the page you're on.</p>
+    </div>
+  </main>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <section id="media" hidden>
+    <div id="media-list"></div>
+  </section>
+
+  <footer>
+    <div class="context-row">
+      <button id="context-chip" class="chip" title="Include the current tab in your next message">
+        <img id="context-icon" alt="">
+        <span id="context-title">No tab</span>
+      </button>
+    </div>
+    <form id="composer">
+      <textarea id="input" rows="1" placeholder="Ask another question..." autofocus></textarea>
+      <button id="send" type="submit" title="Send">↑</button>
+    </form>
+  </footer>
+
+  <script src="markdown.js"></script>
+  <script src="sidepanel.js"></script>
+  <script src="media.js"></script>
+</body>
+</html>

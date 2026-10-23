@@ -1,0 +1,4 @@
+host/byo-sidebar-host
+.DS_Store
+node_modules/
+*.pem
