@@ -9,6 +9,12 @@
 </head>
 <body>
   <header>
+    <div class="skills-wrap">
+      <button id="skills-btn" class="icon" title="Skills" aria-label="Skills" aria-haspopup="menu" aria-expanded="false">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11 2.5 4.5 11H10l-1 6.5L15.5 9H10z"/></svg>
+      </button>
+      <div id="skills-menu" class="dropdown" role="menu"></div>
+    </div>
     <select id="model" title="Model"></select>
     <button id="new-chat" class="icon" title="New chat" aria-label="New chat">
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>
@@ -28,15 +34,27 @@
 
   <section id="info-view" class="view" hidden></section>
 
+  <section id="media-view" class="view" hidden>
+    <div class="media-head">
+      <strong id="media-count">Media on this page</strong>
+      <div class="media-filter" role="tablist">
+        <button data-kind="all" class="on">All</button>
+        <button data-kind="image">Images</button>
+        <button data-kind="video">Videos</button>
+      </div>
+    </div>
+    <div id="media-grid" class="media-grid"></div>
+    <div class="media-actions">
+      <button id="media-select-all">Select all</button>
+      <button id="media-attach">Attach to chat</button>
+      <button id="media-download" class="primary">Download</button>
+    </div>
+  </section>
+
   <main id="messages">
     <div class="empty" id="empty">
       <p>Ask anything about the page you're on.</p>
-      <div class="suggestions">
-        <button data-skill="summarize">Summarize this page</button>
-        <button data-skill="actions">Action items</button>
-        <button data-skill="timestamps">Timestamps for this video</button>
-      </div>
-      <p class="hint">Type <kbd>/</kbd> for skills, <kbd>@</kbd> to add tabs.</p>
+      <p class="hint">Pick a skill with <span class="kbd-icon">⚡</span> or type <kbd>/</kbd>. Type <kbd>@</kbd> to add tabs.</p>
     </div>
   </main>
 

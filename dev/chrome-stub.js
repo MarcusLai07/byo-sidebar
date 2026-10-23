@@ -146,6 +146,17 @@
           const text = target.tabId === 1 ? "Martin Garrix B2B Alesso live at Ultra. Comments: 0:11 Voodoo, 3:55 Under Control" : "Release notes: version 2 ships Friday.";
           return Promise.resolve([{ frameId: 0, result: { selection: window.__selection || "", text, duration: target.tabId === 1 ? 4445 : null } }]);
         }
+        if (func.name === "mediaScript") {
+          const icon = `${location.origin}/extension/icons/icon-128.png`;
+          return Promise.resolve([
+            { frameId: 0, result: { streamed: true, items: [
+              { type: "image", url: icon, w: 128, h: 128, alt: "Logo" },
+              { type: "image", url: `${icon}?big`, w: 1920, h: 1080, alt: "Hero" },
+              { type: "video", url: "https://example.com/clip.mp4", w: 1280, h: 720, poster: icon, duration: 42 },
+              { type: "image", url: "https://blocked.example/x.jpg", w: 800, h: 600, alt: "Blocked" },
+            ] } },
+          ]);
+        }
         if (func.name === "linksScript") return Promise.resolve([{ frameId: 0, result: [["Full tracklist", "https://1001.tl/xyz"]] }]);
         if (func.name === "seekScript") {
           window.__seek = { tabId: target.tabId, seconds: args[0] };
@@ -155,6 +166,7 @@
       },
     },
     downloads: {
+      download: async (o) => (window.__downloads = (window.__downloads || []).concat(o)),
       search: async () => [{ id: 7, filename: "/Users/me/Downloads/logo.png", finalUrl: `${location.origin}/extension/icons/icon-128.png`, mime: "image/png", fileSize: 4200, startTime: new Date().toISOString(), exists: true }],
       open: () => {},
     },

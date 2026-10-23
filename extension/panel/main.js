@@ -10,9 +10,13 @@ import { renderMarkdown } from "./markdown.js";
 import { createRunner, urlsIn } from "./tools.js";
 import { renderInfo } from "./info.js";
 import { renderHistory } from "./history.js";
+import { renderMedia } from "./saver.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
+  skillsBtn: $("skills-btn"),
+  skillsMenu: $("skills-menu"),
+  mediaView: $("media-view"),
   model: $("model"),
   newChat: $("new-chat"),
   historyBtn: $("history-btn"),
@@ -106,11 +110,19 @@ function showView(view) {
   state.view = state.view === view ? null : view;
   els.historyView.hidden = state.view !== "history";
   els.infoView.hidden = state.view !== "info";
+  els.mediaView.hidden = state.view !== "media";
   els.messages.hidden = state.view !== null;
   els.historyBtn.classList.toggle("on", state.view === "history");
   els.infoBtn.classList.toggle("on", state.view === "info");
   if (state.view === "history") renderHistory({ onOpen: openChat, currentId: state.chat?.id });
   if (state.view === "info") showInfo();
+  if (state.view === "media") {
+    renderMedia({
+      attach: addAttachment,
+      done: () => showView("media"), // back to the chat with the images attached
+      toast,
+    });
+  }
 }
 
 function showInfo() {
@@ -275,12 +287,76 @@ els.messages.addEventListener("click", async (e) => {
   if (!ok) toast("No video or audio found in that tab.");
 });
 
-// Suggestions on the empty screen.
-els.empty.addEventListener("click", async (e) => {
-  const id = e.target.closest("button[data-skill]")?.dataset.skill;
-  if (!id) return;
-  state.skill = (await skills.allSkills()).find((s) => s.id === id);
-  send("");
+// ---------- skills dropdown (⚡ next to the model) ----------
+
+async function openSkillsMenu() {
+  const list = await skills.allSkills();
+  const item = (s) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "item";
+    b.setAttribute("role", "menuitem");
+    const t = document.createElement("span");
+    const name = document.createElement("strong");
+    name.textContent = s.name;
+    const sub = document.createElement("small");
+    sub.textContent = s.prompt
+      .replace(/\{(\w+)\}/g, (_, v) => ({ tab: "this page", tabs: "your tabs", selection: "the selection", input: "…" })[v] ?? "")
+      .replace(/…\./g, "…")
+      .replace(/\s+([.,:])/g, "$1")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    t.append(name, sub);
+    // Click runs it now; the pencil adds it to the box so you can add details first.
+    const edit = document.createElement("span");
+    edit.className = "add";
+    edit.title = "Add details before sending";
+    edit.textContent = "✎";
+    edit.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeSkillsMenu();
+      state.skill = s;
+      renderChips();
+      els.input.focus();
+    });
+    b.append(t, edit);
+    b.addEventListener("click", () => {
+      closeSkillsMenu();
+      if (state.view) showView(state.view);
+      state.skill = s;
+      send(els.input.value.trim());
+      els.input.value = "";
+      autosize();
+    });
+    return b;
+  };
+  const manage = document.createElement("button");
+  manage.type = "button";
+  manage.className = "item manage";
+  manage.textContent = "Manage skills…";
+  manage.addEventListener("click", () => {
+    closeSkillsMenu();
+    localStorage.setItem("infoOpen", JSON.stringify([...new Set([...JSON.parse(localStorage.getItem("infoOpen") || "[]"), "skills"])]));
+    if (state.view !== "info") showView("info");
+  });
+  els.skillsMenu.replaceChildren(...list.map(item), manage);
+  els.skillsMenu.classList.add("open");
+  els.skillsBtn.classList.add("on");
+  els.skillsBtn.setAttribute("aria-expanded", "true");
+}
+
+function closeSkillsMenu() {
+  els.skillsMenu.classList.remove("open");
+  els.skillsBtn.classList.remove("on");
+  els.skillsBtn.setAttribute("aria-expanded", "false");
+}
+
+els.skillsBtn.addEventListener("click", () => (els.skillsMenu.classList.contains("open") ? closeSkillsMenu() : openSkillsMenu()));
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".skills-wrap")) closeSkillsMenu();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeSkillsMenu();
 });
 
 // ---------- sending ----------
@@ -819,6 +895,7 @@ async function openAttachMenu() {
   const rows = [
     ["Upload a file…", "Images, PDFs or text", () => els.fileInput.click()],
     ["Screenshot this tab", "What's visible right now", async () => addAttachment(await ctx.screenshot())],
+    ["Images & videos on this page…", "Download them, or attach images", () => showView("media")],
   ];
   if (tab && /\.pdf($|[?#])/i.test(tab.url)) {
     rows.push(["Attach this PDF", tab.title, async () => addAttachment(await ctx.fetchAttachment(tab.url, tab.title))]);
