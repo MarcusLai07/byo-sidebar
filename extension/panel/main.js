@@ -7,6 +7,7 @@ import * as ctx from "./context.js";
 import * as skills from "./skills.js";
 import * as voice from "./voice.js";
 import { renderMarkdown } from "./markdown.js";
+import { createRunner, urlsIn } from "./tools.js";
 import { renderInfo } from "./info.js";
 import { renderHistory } from "./history.js";
 
@@ -195,10 +196,13 @@ function messageEl(msg, index) {
     el.append(bubble);
     el.append(actions([["Edit", () => startEdit(index)]]));
   } else {
+    const tools = document.createElement("div");
+    tools.className = "tools";
+    fillTools(tools, msg);
     const body = document.createElement("div");
     body.className = "body";
     fillBody(body, msg);
-    el.append(body);
+    el.append(tools, body);
     const meta = document.createElement("div");
     meta.className = "meta";
     meta.textContent = msg.model || "";
@@ -208,6 +212,30 @@ function messageEl(msg, index) {
     ], meta));
   }
   return el;
+}
+
+// What the model did while browsing: "Opening 1001tracklists.com ✓".
+function fillTools(box, msg) {
+  box.replaceChildren(
+    ...(msg.tools || []).map((t) => {
+      const row = document.createElement("div");
+      row.className = `tool ${t.status}`;
+      const mark = { running: "…", done: "✓", failed: "✕", asking: "?" }[t.status] || "";
+      row.textContent = `${t.label}${t.note ? ` · ${t.note}` : ""} ${mark}`;
+      if (t.status === "asking" && t.answer) {
+        const allow = document.createElement("button");
+        allow.textContent = "Allow";
+        allow.className = "primary";
+        allow.addEventListener("click", () => t.answer(true));
+        const deny = document.createElement("button");
+        deny.textContent = "Don't open";
+        deny.addEventListener("click", () => t.answer(false));
+        row.append(allow, deny);
+      }
+      return row;
+    })
+  );
+  box.hidden = !msg.tools?.length;
 }
 
 function fillBody(body, msg) {
@@ -396,6 +424,39 @@ async function respond(userMsg, sourceTab, { retried = false } = {}) {
   els.empty.hidden = true;
   scrollDown();
   const body = el.querySelector(".body");
+  const toolBox = el.querySelector(".tools");
+
+  // Read-only browsing: links already in the chat can be opened; others need approval.
+  const browse = localStorage.getItem("browse") !== "off";
+  const seen = new Set(chat.messages.flatMap((m) => urlsIn(m.role === "user" ? m.prompt : m.text)));
+  const showTools = () => {
+    fillTools(toolBox, msg);
+    scrollDown();
+  };
+  const runTool = createRunner({
+    seen,
+    activity(label) {
+      const t = { label, status: "running" };
+      (msg.tools ??= []).push(t);
+      showTools();
+      return {
+        done: (note) => (Object.assign(t, { status: "done", note }), showTools()),
+        fail: (note) => (Object.assign(t, { status: "failed", note }), showTools()),
+      };
+    },
+    approve(url) {
+      return new Promise((resolve) => {
+        const t = { label: `Open ${url}?`, status: "asking" };
+        t.answer = (ok) => {
+          Object.assign(t, { status: ok ? "done" : "failed", note: ok ? "allowed" : "not opened", answer: null });
+          showTools();
+          resolve(ok);
+        };
+        (msg.tools ??= []).push(t);
+        showTools();
+      });
+    },
+  });
 
   let frame = 0;
   const paint = () => {
@@ -432,6 +493,7 @@ async function respond(userMsg, sourceTab, { retried = false } = {}) {
       sessionId: chat.sessionId,
       cliSession: chat.cliSession,
       resume,
+      browse,
       prompt: userMsg.prompt,
       history: resume ? [] : historyBefore(index),
       attachments: (userMsg.attachments || []).filter((a) => a.kind === "image" || a.kind === "pdf"),
@@ -442,6 +504,7 @@ async function respond(userMsg, sourceTab, { retried = false } = {}) {
         frame ||= requestAnimationFrame(paint);
       },
       session: (value) => (chat.cliSession = value),
+      tool: browse ? runTool : null,
       done: () => finish(),
       error: (e) => finish(e),
     }

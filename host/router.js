@@ -4,10 +4,17 @@
 //
 // Wire format (Chrome native messaging): 4-byte little-endian length + UTF-8 JSON.
 
+const fs = require("fs");
+const net = require("net");
+const os = require("os");
+const path = require("path");
 const providers = require("./providers");
 const config = require("./config");
 
 const running = new Map(); // request id -> cancel()
+const toolRunners = new Map(); // request id -> (name, input) => Promise<{ content, isError }>
+const pendingTools = new Map(); // call id -> resolve
+const TOOL_TIMEOUT_MS = 5 * 60 * 1000; // opening an unseen link waits for the user's approval
 
 // stdout carries the protocol, so diagnostics go to stderr (the launcher appends it to a log file).
 const log = (...args) => console.error(new Date().toISOString(), ...args);
@@ -23,6 +30,55 @@ function send(msg, then) {
   header.writeUInt32LE(body.length, 0);
   process.stdout.write(Buffer.concat([header, body]), then);
 }
+
+// Ask the panel to run a browsing tool; resolves with its result.
+function runTool(requestId, name, input) {
+  const callId = `${requestId}:${Math.random().toString(36).slice(2)}`;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      pendingTools.delete(callId);
+      resolve({ content: "The browser didn't answer in time.", isError: true });
+    }, TOOL_TIMEOUT_MS);
+    pendingTools.set(callId, (result) => {
+      clearTimeout(timer);
+      pendingTools.delete(callId);
+      resolve(result);
+    });
+    send({ type: "tool_call", id: requestId, callId, name, input });
+  });
+}
+
+// CLIs reach the tools through a small MCP server (providers/mcp-browse.js) that they
+// spawn; it connects back here over a Unix socket, one JSON object per line.
+const BRIDGE = path.join(os.tmpdir(), `byo-sidebar-${process.pid}.sock`);
+try {
+  fs.rmSync(BRIDGE, { force: true });
+} catch {}
+net
+  .createServer((sock) => {
+    let buf = "";
+    sock.on("data", async (chunk) => {
+      buf += chunk;
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl);
+        buf = buf.slice(nl + 1);
+        let req;
+        try {
+          req = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        const run = toolRunners.get(req.request);
+        const result = run ? await run(req.name, req.input || {}) : { content: "This chat has ended.", isError: true };
+        sock.write(JSON.stringify({ callId: req.callId, ...result }) + "\n");
+      }
+    });
+    sock.on("error", () => {});
+  })
+  .listen(BRIDGE, () => fs.chmodSync(BRIDGE, 0o600));
+process.env.BYO_BRIDGE = BRIDGE;
+process.on("exit", () => fs.rmSync(BRIDGE, { force: true }));
 
 async function handle(msg) {
   if (msg.type === "hello") {
@@ -54,6 +110,12 @@ async function handle(msg) {
   if (msg.type === "cancel") {
     running.get(msg.id)?.();
     running.delete(msg.id);
+    toolRunners.delete(msg.id);
+    return;
+  }
+
+  if (msg.type === "tool_result") {
+    pendingTools.get(msg.callId)?.({ content: String(msg.content ?? ""), isError: !!msg.isError });
     return;
   }
 
@@ -67,16 +129,21 @@ async function handle(msg) {
       send({ type: "error", id: msg.id, message: `${provider.login.name} isn't connected. Connect it from Keys.` });
       return;
     }
+    const tool = msg.browse ? (name, input) => runTool(msg.id, name, input) : null;
+    if (tool) toolRunners.set(msg.id, tool);
     const cancel = provider.chat(msg, {
+      tool,
       delta: (text) => send({ type: "delta", id: msg.id, text }),
       // Providers that pick their own session id (Codex) report it so the panel can store it.
       session: (value) => send({ type: "session", id: msg.id, value }),
       done: () => {
         running.delete(msg.id);
+        toolRunners.delete(msg.id);
         send({ type: "done", id: msg.id });
       },
       error: (message) => {
         running.delete(msg.id);
+        toolRunners.delete(msg.id);
         send({ type: "error", id: msg.id, message });
       },
     });

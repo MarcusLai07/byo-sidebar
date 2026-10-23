@@ -33,6 +33,12 @@ export function connect() {
     }
     const r = msg.id && requests.get(msg.id);
     if (r) {
+      if (msg.type === "tool_call") {
+        // The model wants to browse: run the tool here and send the result back.
+        Promise.resolve(r.tool ? r.tool(msg.name, msg.input) : { content: "Browsing is off.", isError: true })
+          .then((res) => port?.postMessage({ type: "tool_result", id: msg.id, callId: msg.callId, ...res }));
+        return;
+      }
       if (msg.type === "delta") r.delta(msg.text);
       else if (msg.type === "session") r.session?.(msg.value);
       else if (msg.type === "done" || msg.type === "error") {

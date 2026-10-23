@@ -38,11 +38,15 @@ async function tx(mode, fn) {
 export const getChat = (id) => tx("readonly", (s) => s.get(id));
 export const deleteChat = (id) => tx("readwrite", (s) => s.delete(id));
 
-// Attachment bytes stay in memory only; saved chats keep their names.
+// Attachment bytes stay in memory only; saved chats keep their names (in labels).
 export function saveChat(chat) {
   const copy = {
     ...chat,
-    messages: chat.messages.map(({ attachments, ...m }) => m),
+    messages: chat.messages.map(({ attachments, ...m }) => ({
+      ...m,
+      // Tool rows keep their text; approval callbacks can't be stored.
+      ...(m.tools && { tools: m.tools.map(({ label, status, note }) => ({ label, status: status === "asking" ? "failed" : status, note })) }),
+    })),
   };
   return tx("readwrite", (s) => s.put(copy));
 }

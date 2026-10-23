@@ -23,6 +23,7 @@ const GUIDE = [
   ["History", "Every chat is saved on this Mac. Open the clock to search and reopen them."],
   ["Media strip", "Tabs playing audio or video get a mini player above the box: play/pause, skip, seek, mute."],
   ["Shortcut", "Set a keyboard shortcut in your browser's extensions → Keyboard shortcuts page. In Dia, move Dia's own Chat shortcut first (Settings → Shortcuts)."],
+  ["Browsing", "The chat can read your other tabs, follow links (opened in a background tab and closed after) and load more YouTube comments when it needs more to answer. Read-only: it never clicks or types. Turn it off under Models & keys."],
   ["Voice", "Click the mic to dictate. Some browsers don't include speech recognition."],
 ];
 
@@ -97,6 +98,15 @@ function loginsSection({ logins, post }) {
       return row;
     }),
   ];
+}
+
+function browseToggle() {
+  const box = el("input", { type: "checkbox" });
+  box.checked = localStorage.getItem("browse") !== "off";
+  box.addEventListener("change", () => localStorage.setItem("browse", box.checked ? "on" : "off"));
+  return el("label", { class: "toggle" }, box,
+    el("span", {}, el("strong", {}, "Let the chat browse (read-only)"),
+      el("small", {}, "It can list and read your tabs, open links in a background tab, and load more YouTube comments. It never clicks or types. Links that haven't appeared in the chat ask first. Works with Claude Code and API-key models.")));
 }
 
 // ---------- skills ----------
@@ -199,6 +209,7 @@ export function renderInfo(container, deps) {
   const scroll = container.scrollTop;
   container.replaceChildren(
     section("models", "Models & keys",
+      browseToggle(),
       el("h3", {}, "API keys"), ...keysSection(deps),
       el("h3", {}, "Login providers"), ...loginsSection(deps)),
     section("skills", "Skills", ...skillsSection(container, deps)),

@@ -1,6 +1,6 @@
 // Reading context from tabs: page text, selection, YouTube captions, PDFs, screenshots.
 
-const PAGE_LIMIT = 40000;
+export const PAGE_LIMIT = 40000;
 const TAB_LIMIT = 12000; // per @-mentioned tab
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
@@ -212,6 +212,37 @@ export async function readTab(tab, { limit = PAGE_LIMIT, youtube = "full" } = {}
 
 export const readMentionedTab = (tab) => readTab(tab, { limit: TAB_LIMIT, youtube: "brief" });
 
+// More YouTube comments for the browsing tool.
+export async function youtubeComments(tabId, count) {
+  const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func: youtubeData, args: [count] });
+  return result?.comments || [];
+}
+
+function linksScript(max) {
+  const seen = new Set();
+  const out = [];
+  for (const a of document.querySelectorAll("a[href]")) {
+    const href = a.href;
+    if (!/^https?:/.test(href) || seen.has(href)) continue;
+    const text = (a.innerText || a.getAttribute("aria-label") || a.title || "").replace(/\s+/g, " ").trim().slice(0, 100);
+    if (!text) continue;
+    seen.add(href);
+    out.push([text, href]);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+// Links on a page as [text, url] pairs, for following with the browsing tool.
+export async function pageLinks(tabId, max = 80) {
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func: linksScript, args: [max] });
+    return result || [];
+  } catch {
+    return [];
+  }
+}
+
 const attr = (s) => String(s || "").replace(/"/g, "'");
 
 // Turn a read tab into a prompt block. `tag` is "page" for the current tab, "tab" for others.
@@ -228,7 +259,7 @@ export function block(info, tag = "page") {
     parts.push(`<comments order="top">\n${list}\n</comments>`);
   }
   if (yt?.transcript) parts.push(`<transcript language="${yt.transcript.language}">\n${yt.transcript.text}\n</transcript>`);
-  return `<${tag} url="${attr(tab.url)}" title="${attr(tab.title)}">\n${parts.join("\n\n")}\n</${tag}>`;
+  return `<${tag} id="${tab.id}" url="${attr(tab.url)}" title="${attr(tab.title)}">\n${parts.join("\n\n")}\n</${tag}>`;
 }
 
 export async function screenshot() {

@@ -4,7 +4,11 @@
 (() => {
   const listeners = () => {
     const fns = [];
-    return { addListener: (f) => fns.push(f), fire: (...a) => fns.forEach((f) => f(...a)) };
+    return {
+      addListener: (f) => fns.push(f),
+      removeListener: (f) => fns.splice(fns.indexOf(f) >>> 0, 1),
+      fire: (...a) => [...fns].forEach((f) => f(...a)),
+    };
   };
 
   const tabs = [
@@ -38,6 +42,7 @@
   let reply = "Here are the songs:\n\n| Time | Track |\n|---|---|\n| 0:11 | Martin Garrix – **Voodoo** |\n| 3:55 | Alesso – Under Control |\n| 1:02:03 | Closing ID |\n\nThe drop at 10:03 is the highlight.";
   window.__setReply = (r) => (reply = r);
 
+  let pendingTool = null;
   function fakePort() {
     const onMessage = listeners();
     const onDisconnect = listeners();
@@ -60,6 +65,22 @@
               { id: "codex-cli", name: "Codex (ChatGPT)", installed: false, account: null, connected: false, install: "npm i -g @openai/codex", signIn: "codex login" },
             ],
           });
+        } else if (msg.type === "tool_result") {
+          window.__toolResults = (window.__toolResults || []).concat(msg);
+          pendingTool?.(msg);
+        } else if (msg.type === "chat" && msg.browse && /tracklist/i.test(msg.prompt)) {
+          // Fake a browsing round: list tabs, then open an unseen link (needs approval), then answer.
+          (async () => {
+            const call = (name, input) => new Promise((res) => {
+              pendingTool = res;
+              send({ type: "tool_call", id: msg.id, callId: Math.random().toString(36).slice(2), name, input });
+            });
+            await call("list_tabs", {});
+            const opened = await call("open_url", { url: "https://www.1001tracklists.com/tracklist/abc" });
+            const text = `Found it (${opened.isError ? "not opened" : "opened"}). 0:11 Voodoo, 3:55 Under Control.`;
+            send({ type: "delta", id: msg.id, text });
+            send({ type: "done", id: msg.id });
+          })();
         } else if (msg.type === "chat") {
           const chunks = reply.match(/[\s\S]{1,12}/g);
           chunks.forEach((c, i) => setTimeout(() => onMessage.fire({ type: "delta", id: msg.id, text: c }), 10 + i * 8));
@@ -88,7 +109,18 @@
       },
       get: async (id) => tabs.find((t) => t.id === id) || Promise.reject(new Error("no tab")),
       update: async (id, u) => Object.assign(tabs.find((t) => t.id === id) || {}, u),
-      create: async (o) => (window.__created = o),
+      create: async (o) => {
+        window.__created = o;
+        const tab = { id: 50, windowId: 1, active: false, title: "Tracklist – 1001Tracklists", url: o.url, favIconUrl: "" };
+        tabs.push(tab);
+        setTimeout(() => chrome.tabs.onUpdated.fire(tab.id, { status: "complete" }, tab), 30);
+        return tab;
+      },
+      remove: async (id) => {
+        const i = tabs.findIndex((t) => t.id === id);
+        if (i >= 0) tabs.splice(i, 1);
+        window.__removed = id;
+      },
       captureVisibleTab: async () => "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==",
       onActivated: listeners(),
       onUpdated: listeners(),
@@ -102,9 +134,11 @@
         window.__injected = (window.__injected || []).concat({ tabId: target.tabId, fn: func.name });
         if (target.tabId === 3) return Promise.reject(new Error("Cannot access contents of the page"));
         if (func.name === "pageScript") {
+          if (target.tabId === 50) return Promise.resolve([{ frameId: 0, result: { selection: "", text: "1001Tracklists: 0:11 Voodoo; 3:55 Under Control", duration: null } }]);
           const text = target.tabId === 1 ? "Martin Garrix B2B Alesso live at Ultra. Comments: 0:11 Voodoo, 3:55 Under Control" : "Release notes: version 2 ships Friday.";
           return Promise.resolve([{ frameId: 0, result: { selection: window.__selection || "", text, duration: target.tabId === 1 ? 4445 : null } }]);
         }
+        if (func.name === "linksScript") return Promise.resolve([{ frameId: 0, result: [["Full tracklist", "https://1001.tl/xyz"]] }]);
         if (func.name === "seekScript") {
           window.__seek = { tabId: target.tabId, seconds: args[0] };
           return Promise.resolve([{ frameId: 0, result: true }]);

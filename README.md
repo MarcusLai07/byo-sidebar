@@ -7,6 +7,7 @@ Bring your own AI to your browser's sidebar. A Chromium extension (built for peo
 - **Attachments:** upload or paste images, PDFs and text files, screenshot the tab, or attach a recent download.
 - **Clickable timestamps:** times in answers (`3:55`, `1:02:03`) jump the video or audio in the tab you asked about, like YouTube comment timestamps.
 - **Saved chats:** every chat is kept locally and searchable. Edit a question or regenerate an answer, and switch models mid-chat.
+- **Read-only browsing:** when it needs more to answer, the chat can list and read your tabs, open links in a background tab (closed afterwards) and load more YouTube comments. It never clicks, types or submits. Links that haven't appeared in the chat or in pages it read ask you first, so a page can't trick it into sending your data somewhere. Works with Claude Code and API-key models; turn it off in ⓘ → Models & keys.
 - **Right-click and address bar:** select text → right-click → BYO Sidebar to explain, translate or copy-edit it, or ask about an image. Type `ai` + space in the address bar to ask from there.
 - **Voice input** where the browser supports speech recognition.
 - **Media strip:** an Arc-style mini player for every tab that's played sound this session (play/pause, next/previous or ±10s, seek, mute, jump to tab). Next/previous use the site's own buttons on YouTube, YouTube Music, Spotify and SoundCloud.
@@ -63,6 +64,8 @@ Side panel (extension/)  ──native messaging──▶  host/router.js  ──
 ```
 
 The panel (`extension/panel/`) owns the conversation and saves chats in IndexedDB. API providers get the history with every request; CLI providers resume their own session, or get the conversation replayed as text after an edit, a regenerate or a model switch.
+
+Browsing tools are defined in `host/providers/tools.js` and run in the panel (`extension/panel/tools.js`). API providers call them through their native tool-use APIs. Claude Code gets them from a small MCP server (`host/providers/mcp-browse.js`) that relays calls to the router over a Unix socket. Codex and Gemini CLI logins don't browse yet.
 
 The media strip (`extension/media.js`) needs no router: it reads and drives `<video>`/`<audio>` elements and the page's Media Session info directly. To support another site's skip buttons, add its selectors to `ADAPTERS`.
 
