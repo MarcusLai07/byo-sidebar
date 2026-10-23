@@ -2,7 +2,7 @@
 // Runs in a read-only sandbox in an empty folder, without your Codex config or MCP servers.
 // Codex's JSON output delivers each reply whole, so it appears at once rather than streaming.
 
-const { exists, runJsonl } = require("./cli");
+const { exists, output, runJsonl } = require("./cli");
 const { SYSTEM_PROMPT } = require("./prompt");
 
 const BIN = process.env.BYO_CODEX_BIN || "codex";
@@ -13,8 +13,14 @@ const threads = new Map();
 module.exports = {
   id: "codex-cli",
   label: "OpenAI (Codex / ChatGPT login)",
+  login: { name: "Codex (ChatGPT)", install: "npm i -g @openai/codex", signIn: "codex login" },
 
-  isAvailable: () => exists(BIN, ["login", "status"]),
+  isInstalled: () => exists(BIN),
+
+  async account() {
+    const { ok, stdout, stderr } = await output(BIN, ["login", "status"]);
+    return ok ? (stdout || stderr || "Signed in").split("\n")[0] : null;
+  },
 
   // Codex accepts any model your plan allows via -m; "default" leaves it to Codex.
   models: async () => [{ id: "default", label: "Codex default model" }],

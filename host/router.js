@@ -30,7 +30,16 @@ async function handle(msg) {
       type: "hello",
       providers: await providers.available(),
       keys: config.keyStatus(providers.keyNames()),
+      logins: await providers.logins(),
     });
+    return;
+  }
+
+  if (msg.type === "connect") {
+    if (!providers.isLogin(msg.provider)) return;
+    config.setConnected(msg.provider, !!msg.on);
+    log(`${msg.on ? "connected" : "disconnected"} ${msg.provider}`);
+    send({ type: "connected", provider: msg.provider, on: !!msg.on }, () => process.exit(0));
     return;
   }
 
@@ -39,6 +48,7 @@ async function handle(msg) {
     config.setKey(msg.name, msg.value?.trim());
     // Model lists are cached per process; a key change needs a fresh router.
     send({ type: "keySaved", name: msg.name }, () => process.exit(0));
+    return;
   }
 
   if (msg.type === "cancel") {
@@ -51,6 +61,10 @@ async function handle(msg) {
     const provider = providers.get(msg.provider);
     if (!provider) {
       send({ type: "error", id: msg.id, message: `Unknown provider: ${msg.provider}` });
+      return;
+    }
+    if (provider.login && !config.isConnected(provider.id)) {
+      send({ type: "error", id: msg.id, message: `${provider.login.name} isn't connected. Connect it from Keys.` });
       return;
     }
     const cancel = provider.chat(msg, {

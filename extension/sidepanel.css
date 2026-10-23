@@ -122,9 +122,47 @@ select, button {
   font-size: 12.5px;
 }
 
-#login-status { margin: 0; padding-left: 18px; font-size: 12.5px; }
-#login-status li { margin-bottom: 4px; }
-#login-status .muted { color: var(--muted); }
+.login-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.login-row .name { font-size: 12.5px; font-weight: 500; }
+.login-row .name .dot { margin-right: 4px; color: var(--muted); }
+.login-row.connected .name .dot { color: #34c759; }
+
+.login-row .detail {
+  grid-column: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+.login-row .detail code { font-size: 11px; }
+
+.login-row button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  padding: 5px 10px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.login-row button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.login-row button:hover { filter: brightness(1.1); }
 
 main {
   flex: 1;

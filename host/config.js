@@ -35,4 +35,14 @@ module.exports = {
     const keys = load().keys || {};
     return Object.fromEntries(names.map((n) => [n, !!keys[n]]));
   },
+
+  // Login providers are opt-in: being signed in to a CLI isn't enough, the user
+  // has to connect it from the panel first.
+  isConnected: (providerId) => !!load().connected?.[providerId],
+
+  setConnected(providerId, on) {
+    const config = load();
+    config.connected = { ...config.connected, [providerId]: on || undefined };
+    save(config);
+  },
 };

@@ -23,6 +23,7 @@ const state = {
   port: null,
   providers: [],
   keys: {}, // { anthropic: true, ... } which API keys are saved
+  logins: [], // login providers: installed, signed-in account, connected
   reconnecting: false, // the router restarts itself after a key change
   sessionId: null, // null until the first message of a chat
   sentPageUrl: null, // page already sent in this chat, so it isn't re-sent every turn
@@ -63,12 +64,13 @@ function onHostMessage(msg) {
     hideBanner();
     state.providers = msg.providers;
     state.keys = msg.keys || {};
+    state.logins = msg.logins || [];
     fillModels();
     renderSettings();
-    if (!state.providers.length) showBanner("No models available yet. Open Keys to add an API key or set up a login CLI.");
+    if (!state.providers.length) showBanner("No models connected yet. Open Keys to connect a login or add an API key.");
     return;
   }
-  if (msg.type === "keySaved") {
+  if (msg.type === "keySaved" || msg.type === "connected") {
     state.reconnecting = true; // the router exits next; onDisconnect reconnects
     return;
   }
@@ -109,31 +111,54 @@ function fillModels() {
 
 // ---------- keys & login status ----------
 
-const LOGIN_PROVIDERS = [
-  { id: "claude-cli", name: "Claude Code", setup: "install Claude Code, then run claude" },
-  { id: "codex-cli", name: "Codex (ChatGPT)", setup: "npm i -g @openai/codex, then codex login" },
-  { id: "gemini-cli", name: "Gemini CLI", setup: "npm i -g @google/gemini-cli, then run gemini" },
-];
-
 function renderSettings() {
   for (const row of els.settings.querySelectorAll(".key-row")) {
     const input = row.querySelector("input");
     input.value = "";
     input.placeholder = state.keys[row.dataset.name] ? "•••••• saved" : input.dataset.placeholder;
   }
-  els.loginStatus.innerHTML = "";
-  for (const p of LOGIN_PROVIDERS) {
-    const li = document.createElement("li");
-    const ready = state.providers.some((x) => x.id === p.id);
-    li.textContent = `${ready ? "✓" : "○"} ${p.name}`;
-    if (!ready) {
-      const hint = document.createElement("span");
-      hint.className = "muted";
-      hint.textContent = ` — ${p.setup}`;
-      li.append(hint);
-    }
-    els.loginStatus.append(li);
-  }
+
+  els.loginStatus.replaceChildren(
+    ...state.logins.map((l) => {
+      const row = document.createElement("div");
+      const live = l.connected && l.account;
+      row.className = `login-row${live ? " connected" : ""}`;
+
+      const name = document.createElement("div");
+      name.className = "name";
+      name.innerHTML = `<span class="dot">●</span>`;
+      name.append(l.name);
+
+      // Text built with textContent/code nodes only: account names come from local CLIs.
+      const detail = document.createElement("div");
+      detail.className = "detail";
+      const code = (t) => Object.assign(document.createElement("code"), { textContent: t });
+      if (!l.installed) detail.append("Not installed: ", code(l.install));
+      else if (!l.account) detail.append("Not signed in. In Terminal run ", code(l.signIn), ", then reopen this panel.");
+      else detail.append(l.connected ? `Using ${l.account}` : `Signed in as ${l.account}`);
+
+      row.append(name, detail);
+
+      if (l.installed && l.account) {
+        const btn = document.createElement("button");
+        btn.textContent = l.connected ? "Disconnect" : "Connect";
+        if (!l.connected) btn.className = "primary";
+        btn.addEventListener("click", () => {
+          if (!state.port) return showBanner("The local router isn't connected.");
+          btn.disabled = true;
+          state.port.postMessage({ type: "connect", provider: l.id, on: !l.connected });
+        });
+        row.append(btn);
+      } else if (l.connected) {
+        // Connected earlier but the CLI was signed out or removed since: allow turning it off.
+        const btn = document.createElement("button");
+        btn.textContent = "Disconnect";
+        btn.addEventListener("click", () => state.port?.postMessage({ type: "connect", provider: l.id, on: false }));
+        row.append(btn);
+      }
+      return row;
+    })
+  );
 }
 
 for (const row of els.settings.querySelectorAll(".key-row")) {

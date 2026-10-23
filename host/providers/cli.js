@@ -14,6 +14,14 @@ function exists(bin, args = ["--version"]) {
   return new Promise((resolve) => execFile(bin, args, { cwd: CWD }, (err) => resolve(!err)));
 }
 
+function output(bin, args) {
+  return new Promise((resolve) =>
+    execFile(bin, args, { cwd: CWD, timeout: 15000 }, (err, stdout, stderr) =>
+      resolve({ ok: !err, stdout: String(stdout).trim(), stderr: String(stderr).trim() })
+    )
+  );
+}
+
 // onEvent(ev, { delta, done, error }) handles one parsed JSONL line.
 function runJsonl(bin, args, { stdin, env }, onEvent, { delta, done, error }) {
   const child = spawn(bin, args, { cwd: CWD, env: { ...process.env, ...env }, stdio: ["pipe", "pipe", "pipe"] });
@@ -57,4 +65,4 @@ function runJsonl(bin, args, { stdin, env }, onEvent, { delta, done, error }) {
   };
 }
 
-module.exports = { CWD, exists, runJsonl };
+module.exports = { CWD, exists, output, runJsonl };

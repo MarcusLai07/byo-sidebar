@@ -1,6 +1,9 @@
 // Gemini via the Gemini CLI, using your Google sign-in (run `gemini` once to log in).
 // Runs in "plan" (read-only) approval mode in an empty folder.
 
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const { exists, runJsonl } = require("./cli");
 const { SYSTEM_PROMPT } = require("./prompt");
 
@@ -9,8 +12,19 @@ const BIN = process.env.BYO_GEMINI_BIN || "gemini";
 module.exports = {
   id: "gemini-cli",
   label: "Gemini (Google login)",
+  login: { name: "Gemini CLI", install: "npm i -g @google/gemini-cli", signIn: "gemini (then choose Login with Google)" },
 
-  isAvailable: () => exists(BIN),
+  isInstalled: () => exists(BIN),
+
+  // The Gemini CLI has no status command; read the files its Google sign-in writes.
+  async account() {
+    const dir = path.join(os.homedir(), ".gemini");
+    try {
+      const { active } = JSON.parse(fs.readFileSync(path.join(dir, "google_accounts.json"), "utf8"));
+      if (active) return active;
+    } catch {}
+    return fs.existsSync(path.join(dir, "oauth_creds.json")) ? "Signed in with Google" : null;
+  },
 
   models: async () => [
     { id: "default", label: "Gemini CLI default model" },

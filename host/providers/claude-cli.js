@@ -1,7 +1,7 @@
 // Claude via the Claude Code CLI, using whatever account `claude` is signed in with.
 // No API key needed. Runs with every tool disabled, so it can only chat.
 
-const { exists, runJsonl } = require("./cli");
+const { exists, output, runJsonl } = require("./cli");
 const { SYSTEM_PROMPT } = require("./prompt");
 
 const BIN = process.env.BYO_CLAUDE_BIN || "claude";
@@ -9,8 +9,21 @@ const BIN = process.env.BYO_CLAUDE_BIN || "claude";
 module.exports = {
   id: "claude-cli",
   label: "Claude (Claude Code login)",
+  login: { name: "Claude Code", install: "Install Claude Code from claude.com/claude-code", signIn: "claude auth login" },
 
-  isAvailable: () => exists(BIN),
+  isInstalled: () => exists(BIN),
+
+  async account() {
+    const { ok, stdout } = await output(BIN, ["auth", "status"]);
+    if (!ok) return null;
+    try {
+      const s = JSON.parse(stdout);
+      if (!s.loggedIn) return null;
+      return [s.email, s.subscriptionType && `Claude ${s.subscriptionType}`].filter(Boolean).join(" · ") || "Signed in";
+    } catch {
+      return null;
+    }
+  },
 
   models: async () => [
     { id: "opus", label: "Claude Opus" },
