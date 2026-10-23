@@ -12,9 +12,9 @@ const KEY_PROVIDERS = [
 
 const GUIDE = [
   ["Ask about the page", "Your current tab is included automatically. Click its chip above the box to leave it out. Highlighted text is sent too."],
-  ["Skills", "Type / to pick a saved prompt like Summarize, Copy edit or Timestamps. Make your own under Skills."],
+  ["Skills & actions", "Click ⚡ next to the model for skills (Summarize, Copy edit, Timestamps…) and actions like saving the page's images and videos. Or type / for skills. Make your own under Skills."],
   ["Other tabs", "Type @ to add another tab, or a whole tab group, to your question."],
-  ["Attachments", "Use + to upload images, PDFs or text files, screenshot the tab, or pick a recent download. You can also paste images."],
+  ["Attachments", "Use the paperclip to upload images, PDFs or text files, screenshot the tab, or pick a recent download. You can also paste images."],
   ["PDFs", "Open a PDF in a tab and ask about it: the sidebar sends the PDF itself."],
   ["Videos", "Timestamps in answers are links: click one to jump the video. On YouTube, open “Show transcript” under the video for answers based on the full captions."],
   ["Right-click", "Select text and right-click → BYO Sidebar to explain, translate or copy-edit it. Right-click an image to ask about it."],

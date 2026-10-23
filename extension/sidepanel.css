@@ -759,9 +759,21 @@ button.primary { background: var(--accent) !important; border-color: var(--accen
 
 .dropdown .item:hover .add { opacity: 1; }
 .dropdown .item .add:hover { background: var(--hover); color: var(--fg); }
-.dropdown .item.manage { justify-content: center; margin-top: 2px; border-top: 1px solid var(--border); border-radius: 0 0 8px 8px; color: var(--muted); font-size: 12px; }
+.dropdown .item.manage { justify-content: flex-start; color: var(--muted); font-size: 12px; }
 
 .kbd-icon { color: var(--accent); }
+
+.dropdown .menu-heading {
+  padding: 8px 8px 3px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.dropdown .menu-heading:not(:first-child) { margin-top: 4px; border-top: 1px solid var(--border); padding-top: 10px; }
+.dropdown .item.action strong::before { content: "›"; margin-right: 6px; color: var(--accent); }
 
 @media (prefers-reduced-motion: reduce) {
   .dropdown, .dropdown.open { transition: none; }

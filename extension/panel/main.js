@@ -339,7 +339,32 @@ async function openSkillsMenu() {
     localStorage.setItem("infoOpen", JSON.stringify([...new Set([...JSON.parse(localStorage.getItem("infoOpen") || "[]"), "skills"])]));
     if (state.view !== "info") showView("info");
   });
-  els.skillsMenu.replaceChildren(...list.map(item), manage);
+  const heading = (text) => Object.assign(document.createElement("div"), { className: "menu-heading", textContent: text });
+  // Things the sidebar does (not prompts), kept apart from the skills.
+  const action = (name, sub, run) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "item action";
+    b.setAttribute("role", "menuitem");
+    const t = document.createElement("span");
+    t.append(Object.assign(document.createElement("strong"), { textContent: name }), Object.assign(document.createElement("small"), { textContent: sub }));
+    b.append(t);
+    b.addEventListener("click", async () => {
+      closeSkillsMenu();
+      try {
+        await run();
+      } catch (e) {
+        toast(e.message);
+      }
+    });
+    return b;
+  };
+  const actions = [
+    action("Save images & videos", "Download what's on this page, or attach images", () => state.view !== "media" && showView("media")),
+    action("Screenshot this tab", "Attach what's visible right now", async () => addAttachment(await ctx.screenshot())),
+    action("Upload a file", "Images, PDFs or text", () => els.fileInput.click()),
+  ];
+  els.skillsMenu.replaceChildren(heading("Actions"), ...actions, heading("Skills"), ...list.map(item), manage);
   els.skillsMenu.classList.add("open");
   els.skillsBtn.classList.add("on");
   els.skillsBtn.setAttribute("aria-expanded", "true");
@@ -895,7 +920,6 @@ async function openAttachMenu() {
   const rows = [
     ["Upload a file…", "Images, PDFs or text", () => els.fileInput.click()],
     ["Screenshot this tab", "What's visible right now", async () => addAttachment(await ctx.screenshot())],
-    ["Images & videos on this page…", "Download them, or attach images", () => showView("media")],
   ];
   if (tab && /\.pdf($|[?#])/i.test(tab.url)) {
     rows.push(["Attach this PDF", tab.title, async () => addAttachment(await ctx.fetchAttachment(tab.url, tab.title))]);
