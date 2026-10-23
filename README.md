@@ -13,7 +13,7 @@ Bring your own AI to your browser's sidebar. A Chromium extension (built for peo
 - **No API key needed for Claude:** it can use your signed-in [Claude Code](https://claude.com/claude-code) CLI, with all tools disabled.
 - Everything runs on your machine; questions go only to the model provider you pick.
 
-On YouTube, open **Show transcript** under the video for answers based on the full captions. YouTube blocks extensions from fetching captions directly, so otherwise the sidebar uses the description and comments.
+On YouTube the sidebar reads the full description and the top ~40 comments (untruncated) straight from YouTube's data, so nothing needs expanding or scrolling. For the spoken words too, open **Show transcript** under the video: YouTube blocks extensions from fetching captions directly. On other sites, text folded behind "read more" or closed sections is included as well.
 
 > Not affiliated with The Browser Company or Dia. Browsers don't let extensions replace their built-in UI, so this runs in the extension side panel (or a docked window where side panels aren't supported).
 

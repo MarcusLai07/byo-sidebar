@@ -2,7 +2,6 @@
 
 const PAGE_LIMIT = 40000;
 const TAB_LIMIT = 12000; // per @-mentioned tab
-const TRANSCRIPT_LIMIT = 60000;
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 export async function activeTab() {
@@ -24,33 +23,112 @@ export async function tabGroups() {
   return Promise.all(groups.map(async (g) => ({ ...g, tabs: await chrome.tabs.query({ groupId: g.id }) })));
 }
 
-// Runs in a YouTube page: reads the transcript panel if the user has opened it
-// ("…more" → "Show transcript"). YouTube blocks fetching captions directly
-// (its caption and transcript endpoints need a device attestation token), so
-// without the panel the chat relies on the page text: description and comments.
-function youtubeTranscript(limit) {
+// Runs in a YouTube watch page (main world). Visible text is a poor source there:
+// the description is collapsed, comments only load when you scroll, and long
+// comments are cut at "Read more". So read YouTube's own data instead:
+// - the full description from the player response,
+// - the top comments, fetched the same way the page does when you scroll,
+// - the transcript, if its panel is open (YouTube blocks fetching captions directly:
+//   its caption and transcript endpoints need a device attestation token).
+async function youtubeData(maxComments) {
+  const out = { description: "", channel: "", comments: [], transcript: null };
+  const player = document.getElementById("movie_player");
+  const details = (player?.getPlayerResponse?.() || window.ytInitialPlayerResponse)?.videoDetails;
+  out.description = details?.shortDescription || "";
+  out.channel = details?.author || "";
+
+  const find = (obj, test, depth = 0) => {
+    if (!obj || typeof obj !== "object" || depth > 45) return null;
+    const hit = test(obj);
+    if (hit) return hit;
+    for (const v of Object.values(obj)) {
+      const r = find(v, test, depth + 1);
+      if (r) return r;
+    }
+    return null;
+  };
+  const tokenIn = (obj) => find(obj, (o) => o.continuationCommand?.token);
+
+  try {
+    const cfg = window.ytcfg;
+    const data = document.querySelector("ytd-app")?.data?.response || window.ytInitialData;
+    const section = find(data, (o) => o.itemSectionRenderer?.sectionIdentifier === "comment-item-section" && o.itemSectionRenderer);
+    let token = section && tokenIn(section);
+    for (let page = 0; token && page < 3 && out.comments.length < maxComments; page++) {
+      const res = await fetch("/youtubei/v1/next?prettyPrint=false", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "X-Youtube-Client-Name": String(cfg.get("INNERTUBE_CONTEXT_CLIENT_NAME")),
+          "X-Youtube-Client-Version": cfg.get("INNERTUBE_CLIENT_VERSION"),
+        },
+        body: JSON.stringify({ context: cfg.get("INNERTUBE_CONTEXT"), continuation: token }),
+      });
+      if (!res.ok) break;
+      const json = await res.json();
+      for (const m of json.frameworkUpdates?.entityBatchUpdate?.mutations || []) {
+        const c = m.payload?.commentEntityPayload;
+        if (c?.properties?.content?.content) {
+          out.comments.push({ author: c.author?.displayName || "", likes: c.toolbar?.likeCountNotliked || "", text: c.properties.content.content });
+        }
+      }
+      // The response has a header block and a comments block; the next page's token is
+      // in the continuation item that ends the comments block.
+      const items = (json.onResponseReceivedEndpoints || []).flatMap(
+        (e) => (e.reloadContinuationItemsCommand || e.appendContinuationItemsAction)?.continuationItems || []
+      );
+      const more = items.filter((i) => i.continuationItemRenderer).pop();
+      token = more ? tokenIn(more.continuationItemRenderer) : null;
+    }
+  } catch {
+    // comments are a bonus; keep whatever we got
+  }
+  out.comments = out.comments.slice(0, maxComments);
+
   const panel = [...document.querySelectorAll("ytd-engagement-panel-section-list-renderer")].find(
     (p) => /transcript/i.test(p.getAttribute("target-id") || "") && p.getAttribute("visibility") !== "ENGAGEMENT_PANEL_VISIBILITY_HIDDEN"
   );
-  const raw = panel?.innerText || "";
-  // Lines come as "0:12\nSome words", sometimes with chapter titles in between.
   const lines = [];
   let time = null;
-  for (const line of raw.split("\n").map((l) => l.trim()).filter(Boolean)) {
+  // Lines come as "0:12\nSome words", sometimes with chapter titles in between.
+  for (const line of (panel?.innerText || "").split("\n").map((l) => l.trim()).filter(Boolean)) {
     if (/^(\d{1,2}:)?\d{1,2}:\d{2}$/.test(line)) time = line;
     else if (time) {
       lines.push(`[${time}] ${line}`);
       time = null;
     }
   }
-  if (lines.length < 3) return null;
-  return { language: document.documentElement.lang || "", auto: false, text: lines.join("\n").slice(0, limit) };
+  if (lines.length >= 3) out.transcript = { language: document.documentElement.lang || "", text: lines.join("\n").slice(0, 60000) };
+  return out;
 }
 
+// Runs in any page: visible text, plus text that's in the page but folded away
+// (closed <details>, "read more" expanders, line-clamped or collapsed sections).
 function pageScript(limit) {
+  const visible = document.body?.innerText || "";
+  const folded = [];
+  const seen = new Set();
+  const FOLD = /expand|collaps|truncat|read-?more|show-?more|clamp|accordion|spoiler/i;
+  const candidates = [
+    ...document.querySelectorAll("details:not([open]) > :not(summary)"),
+    ...[...document.querySelectorAll("[class], [id], [aria-expanded='false']")].filter(
+      (el) => FOLD.test(`${el.className} ${el.id}`) || el.getAttribute("aria-expanded") === "false"
+    ),
+  ];
+  for (const el of candidates) {
+    if (el.closest("script, style, noscript, template, nav, header, footer")) continue;
+    const text = (el.textContent || "").replace(/\s+/g, " ").trim();
+    // Only text that innerText missed, and big enough to be content rather than a label.
+    if (text.length < 120 || seen.has(text) || visible.includes(text.slice(0, 80))) continue;
+    seen.add(text);
+    folded.push(text);
+    if (folded.join("").length > limit / 2) break;
+  }
+  const text = folded.length ? `${visible}\n\n[Collapsed on the page]\n${folded.join("\n\n")}` : visible;
   return {
     selection: String(getSelection() || "").trim(),
-    text: (document.body?.innerText || "").slice(0, limit),
+    text: text.slice(0, limit),
     duration: (() => {
       const m = [...document.querySelectorAll("video, audio")].find((x) => isFinite(x.duration) && x.duration > 0);
       return m ? m.duration : null;
@@ -94,9 +172,10 @@ export function fromBytes(buf, mime, name) {
   throw new Error(`${name}: only images, PDFs and text files can be attached.`);
 }
 
-// Read one tab. Returns { tab, text, selection, transcript, pdf, unreadable }.
-export async function readTab(tab, { limit = PAGE_LIMIT, transcript = true } = {}) {
-  const out = { tab, text: "", selection: "", transcript: null, pdf: null, unreadable: false };
+// Read one tab. Returns { tab, text, selection, youtube, pdf, unreadable }.
+// youtube: "full" for the current tab, "brief" for @-mentioned ones (fewer comments).
+export async function readTab(tab, { limit = PAGE_LIMIT, youtube = "full" } = {}) {
+  const out = { tab, text: "", selection: "", youtube: null, pdf: null, unreadable: false };
   try {
     const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: pageScript, args: [limit] });
     Object.assign(out, { text: result.text, selection: result.selection, duration: result.duration });
@@ -115,23 +194,23 @@ export async function readTab(tab, { limit = PAGE_LIMIT, transcript = true } = {
       // stays unreadable
     }
   }
-  if (transcript && /^https:\/\/(www\.|m\.)?youtube\.com\/watch/.test(tab.url)) {
+  if (youtube && /^https:\/\/(www\.|m\.)?youtube\.com\/watch/.test(tab.url)) {
     try {
       const [{ result }] = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         world: "MAIN",
-        func: youtubeTranscript,
-        args: [TRANSCRIPT_LIMIT],
+        func: youtubeData,
+        args: [youtube === "full" ? 40 : 15],
       });
-      out.transcript = result;
+      out.youtube = result;
     } catch {
-      // no captions
+      // not a readable watch page
     }
   }
   return out;
 }
 
-export const readMentionedTab = (tab) => readTab(tab, { limit: TAB_LIMIT });
+export const readMentionedTab = (tab) => readTab(tab, { limit: TAB_LIMIT, youtube: "brief" });
 
 const attr = (s) => String(s || "").replace(/"/g, "'");
 
@@ -142,9 +221,13 @@ export function block(info, tag = "page") {
   const parts = [];
   if (info.pdf) parts.push(`(The PDF is attached.)`);
   else parts.push(info.text);
-  if (info.transcript) {
-    parts.push(`<transcript language="${info.transcript.language}"${info.transcript.auto ? ' auto-generated="true"' : ""}>\n${info.transcript.text}\n</transcript>`);
+  const yt = info.youtube;
+  if (yt?.description) parts.push(`<description channel="${attr(yt.channel)}">\n${yt.description}\n</description>`);
+  if (yt?.comments?.length) {
+    const list = yt.comments.map((c) => `- ${c.author}${c.likes ? ` (${c.likes} likes)` : ""}: ${c.text}`).join("\n");
+    parts.push(`<comments order="top">\n${list}\n</comments>`);
   }
+  if (yt?.transcript) parts.push(`<transcript language="${yt.transcript.language}">\n${yt.transcript.text}\n</transcript>`);
   return `<${tag} url="${attr(tab.url)}" title="${attr(tab.title)}">\n${parts.join("\n\n")}\n</${tag}>`;
 }
 
