@@ -20,7 +20,9 @@ http
       if (url.searchParams.has("harness") && file.endsWith("sidepanel.html")) {
         data = Buffer.from(String(data).replace("<script", '<script src="/dev/chrome-stub.js"></script>\n  <script'));
       }
-      res.writeHead(200, { "content-type": types[path.extname(file)] || "application/octet-stream" }).end(data);
+      res
+        .writeHead(200, { "content-type": types[path.extname(file)] || "application/octet-stream", "content-length": data.length })
+        .end(req.method === "HEAD" ? undefined : data);
     });
   })
   .listen(port, "127.0.0.1", () => console.log(`http://127.0.0.1:${port}/extension/sidepanel.html?harness`));

@@ -18,7 +18,8 @@
     "storage",
     "nativeMessaging",
     "contextMenus",
-    "downloads"
+    "downloads",
+    "declarativeNetRequestWithHostAccess"
   ],
   "host_permissions": [
     "<all_urls>"

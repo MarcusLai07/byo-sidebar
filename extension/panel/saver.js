@@ -18,7 +18,10 @@ function mediaScript() {
     if (url.startsWith("data:") ? url.length < 400 : !/^https?:/.test(url)) return; // skip tiny placeholders
     if (seen.has(url)) return;
     seen.add(url);
-    out.push({ type, url, ...extra });
+    // Size of files the page already loaded (0 for cross-origin files without timing access).
+    const timing = performance.getEntriesByName(url)[0];
+    const bytes = timing?.encodedBodySize || timing?.transferSize || 0;
+    out.push({ type, url, ...extra, ...(bytes && { bytes }) });
   };
   const largest = (srcset) =>
     srcset
@@ -88,6 +91,66 @@ let pageTab = null;
 let deps = {};
 const selected = new Set();
 
+// ---------- sizes & referrer ----------
+
+const sizeCache = new Map(); // url -> bytes (0 = unknown)
+const queue = [];
+let active = 0;
+
+// File size without downloading: HEAD's Content-Length, else a 1-byte range request's
+// Content-Range total. Six at a time.
+function sizeOf(url) {
+  if (sizeCache.has(url)) return Promise.resolve(sizeCache.get(url));
+  return new Promise((resolve) => {
+    queue.push({ url, resolve });
+    pump();
+  });
+}
+
+async function pump() {
+  while (active < 6 && queue.length) {
+    const { url, resolve } = queue.shift();
+    active++;
+    (async () => {
+      let bytes = 0;
+      try {
+        const head = await fetch(url, { method: "HEAD", credentials: "include" });
+        bytes = Number(head.headers.get("content-length")) || 0;
+        if (!head.ok || !bytes) {
+          const part = await fetch(url, { headers: { range: "bytes=0-0" }, credentials: "include" });
+          bytes = Number((part.headers.get("content-range") || "").split("/")[1]) || Number(part.headers.get("content-length")) || 0;
+          part.body?.cancel();
+        }
+      } catch {
+        // unknown
+      }
+      sizeCache.set(url, bytes);
+      resolve(bytes);
+    })().finally(() => {
+      active--;
+      pump();
+    });
+  }
+}
+
+export const formatBytes = (b) =>
+  !b ? "" : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`;
+
+// Many sites only serve images to their own pages (hotlink protection), which left
+// previews blank. For requests from this panel (not from tabs) to the hosts on the
+// page, send the page as the Referer, the way the page itself would.
+async function sendPageAsReferrer(pageUrl, urls) {
+  if (!chrome.declarativeNetRequest?.updateSessionRules) return;
+  const hosts = [...new Set(urls.filter((u) => /^https?:/.test(u)).map((u) => new URL(u).hostname))].slice(0, 200);
+  const rule = hosts.length && {
+    id: 1,
+    priority: 1,
+    action: { type: "modifyHeaders", requestHeaders: [{ header: "referer", operation: "set", value: pageUrl }] },
+    condition: { tabIds: [chrome.tabs.TAB_ID_NONE], requestDomains: hosts, resourceTypes: ["image", "media", "xmlhttprequest", "other"] },
+  };
+  await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [1], ...(rule && { addRules: [rule] }) }).catch(() => {});
+}
+
 const shown = () => items.filter((m) => kind === "all" || (kind === "video" ? m.type !== "image" : m.type === "image"));
 
 function fileName(m, i) {
@@ -101,6 +164,9 @@ function fileName(m, i) {
   return `BYO Sidebar/${host}/${name}`;
 }
 
+const label = (m) =>
+  [m.w && m.h ? `${m.w}×${m.h}` : m.duration ? `${Math.round(m.duration)}s` : "", formatBytes(m.bytes)].filter(Boolean).join(" · ");
+
 function tile(m) {
   const t = document.createElement("button");
   t.type = "button";
@@ -111,13 +177,12 @@ function tile(m) {
     img.src = m.url;
     img.loading = "lazy";
     img.alt = m.alt || "";
-    img.referrerPolicy = "no-referrer";
     img.onerror = () => t.classList.add("broken");
     img.onload = () => {
       if (!m.w) {
         m.w = img.naturalWidth;
         m.h = img.naturalHeight;
-        size.textContent = `${m.w}×${m.h}`;
+        size.textContent = label(m);
       }
     };
     t.append(img);
@@ -138,7 +203,15 @@ function tile(m) {
   if (!badge.textContent) badge.hidden = true;
   const size = document.createElement("span");
   size.className = "media-size";
-  size.textContent = m.w && m.h ? `${m.w}×${m.h}` : m.duration ? `${Math.round(m.duration)}s` : "";
+  size.textContent = label(m);
+  if (!m.bytes && /^https?:/.test(m.url)) {
+    sizeOf(m.url).then((b) => {
+      if (!b) return;
+      m.bytes = b;
+      size.textContent = label(m);
+      if (selected.has(m.url)) updateActions();
+    });
+  }
   const check = document.createElement("span");
   check.className = "media-check";
   check.textContent = "✓";
@@ -169,7 +242,8 @@ function draw() {
 
 function updateActions() {
   const n = selected.size;
-  els.download.textContent = n ? `Download ${n}` : "Download";
+  const bytes = items.filter((m) => selected.has(m.url)).reduce((sum, m) => sum + (m.bytes || 0), 0);
+  els.download.textContent = n ? `Download ${n}${bytes ? ` · ${formatBytes(bytes)}` : ""}` : "Download";
   els.download.disabled = !n;
   const imgs = items.filter((m) => selected.has(m.url) && m.type === "image").length;
   els.attach.disabled = !imgs;
@@ -247,6 +321,8 @@ export async function renderMedia(d, { keepSelection = false } = {}) {
     return;
   }
   for (const m of items) if (previous.has(m.url)) selected.add(m.url);
+  for (const m of items) if (!m.bytes && sizeCache.get(m.url)) m.bytes = sizeCache.get(m.url);
+  await sendPageAsReferrer(pageTab.url, items.flatMap((m) => [m.url, m.poster].filter(Boolean)));
   setTimeout(() => els.refresh.classList.remove("spinning"), 300);
   // Biggest first: the photos you're after, not thumbnails.
   items.sort((a, b) => (b.type === "image") - (a.type === "image") || (b.w * b.h || 0) - (a.w * a.h || 0));
