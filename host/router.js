@@ -10,6 +10,8 @@ const os = require("os");
 const path = require("path");
 const providers = require("./providers");
 const config = require("./config");
+const video = require("./video");
+const { TOOLS, isLocal } = require("./providers/tools");
 
 const running = new Map(); // request id -> cancel()
 const toolRunners = new Map(); // request id -> (name, input) => Promise<{ content, isError }>
@@ -31,8 +33,30 @@ function send(msg, then) {
   process.stdout.write(Buffer.concat([header, body]), then);
 }
 
+// Video tools run here; everything else is relayed to the panel. Local tools report
+// progress as activity rows in the reply.
+async function runLocalTool(requestId, name, input) {
+  const activityId = Math.random().toString(36).slice(2);
+  const progress = (label, note) => send({ type: "tool_activity", id: requestId, activityId, label, note, status: "running" });
+  try {
+    const content = name === "video_transcript" ? await video.transcript(input.url, progress, input.offset) : await video.geminiWatch(input.url, input.question, progress);
+    send({ type: "tool_activity", id: requestId, activityId, status: "done" });
+    return { content, isError: false };
+  } catch (e) {
+    send({ type: "tool_activity", id: requestId, activityId, status: "failed", note: e.message.slice(0, 120) });
+    return { content: e.message, isError: true };
+  }
+}
+
+// Which tools this chat gets: browser tools always, video tools when they can work.
+async function toolNamesFor() {
+  const v = await video.available();
+  return TOOLS.filter((t) => !t.local || (t.name === "video_transcript" ? v.ytdlp : v.gemini)).map((t) => t.name);
+}
+
 // Ask the panel to run a browsing tool; resolves with its result.
 function runTool(requestId, name, input) {
+  if (isLocal(name)) return runLocalTool(requestId, name, input);
   const callId = `${requestId}:${Math.random().toString(36).slice(2)}`;
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
@@ -131,8 +155,10 @@ async function handle(msg) {
     }
     const tool = msg.browse ? (name, input) => runTool(msg.id, name, input) : null;
     if (tool) toolRunners.set(msg.id, tool);
+    const toolNames = tool ? await toolNamesFor() : null;
     const cancel = provider.chat(msg, {
       tool,
+      toolNames,
       delta: (text) => send({ type: "delta", id: msg.id, text }),
       // Providers that pick their own session id (Codex) report it so the panel can store it.
       session: (value) => send({ type: "session", id: msg.id, value }),

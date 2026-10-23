@@ -24,10 +24,14 @@ fi
 CLAUDE_BIN="$(command -v claude || true)"
 CODEX_BIN="$(command -v codex || true)"
 GEMINI_BIN="$(command -v gemini || true)"
+# Optional, for video transcripts: yt-dlp (+ ffmpeg) and a local transcriber.
+YTDLP_BIN="$(command -v yt-dlp || true)"
+PARAKEET_BIN="$(command -v parakeet-mlx || true)"
+WHISPER_BIN="$(command -v whisper-cli || true)"
 
 # Browsers launch hosts with a bare environment, so bake absolute paths in.
 EXTRA_PATH=""
-for b in "$CLAUDE_BIN" "$CODEX_BIN" "$GEMINI_BIN"; do
+for b in "$CLAUDE_BIN" "$CODEX_BIN" "$GEMINI_BIN" "$YTDLP_BIN" "$PARAKEET_BIN" "$WHISPER_BIN" "$(command -v ffmpeg || true)"; do
   [[ -n "$b" ]] && EXTRA_PATH="$EXTRA_PATH$(dirname "$b"):"
 done
 cat > "$LAUNCHER" <<EOF
@@ -36,6 +40,10 @@ export PATH="$(dirname "$NODE_BIN"):$EXTRA_PATH/usr/local/bin:/opt/homebrew/bin:
 export BYO_CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 export BYO_CODEX_BIN="${CODEX_BIN:-codex}"
 export BYO_GEMINI_BIN="${GEMINI_BIN:-gemini}"
+export BYO_YTDLP_BIN="${YTDLP_BIN:-yt-dlp}"
+export BYO_PARAKEET_BIN="${PARAKEET_BIN:-parakeet-mlx}"
+export BYO_WHISPER_BIN="${WHISPER_BIN:-whisper-cli}"
+${BYO_WHISPER_MODEL:+export BYO_WHISPER_MODEL="$BYO_WHISPER_MODEL"}
 exec "$NODE_BIN" "$DIR/router.js" 2>>"$LOG_DIR/host.log"
 EOF
 chmod +x "$LAUNCHER"
@@ -79,7 +87,13 @@ echo "Login providers found:"
 echo "  Claude Code: ${CLAUDE_BIN:-not installed}"
 echo "  Codex:       ${CODEX_BIN:-not installed (npm i -g @openai/codex, then: codex login)}"
 echo "  Gemini CLI:  ${GEMINI_BIN:-not installed (npm i -g @google/gemini-cli, then run: gemini)}"
-echo "API keys can be added from the panel's Keys screen. Re-run this script after installing a CLI."
+echo
+echo "Video transcripts (optional):"
+echo "  yt-dlp:      ${YTDLP_BIN:-not installed (brew install yt-dlp ffmpeg)}"
+echo "  Parakeet:    ${PARAKEET_BIN:-not installed (uv tool install parakeet-mlx; English/European audio)}"
+echo "  whisper.cpp: ${WHISPER_BIN:-not installed (brew install whisper.cpp; any language)}"
+echo
+echo "API keys can be added from the panel's ⓘ screen. Re-run this script after installing anything above."
 echo "Router installed to: $DIR"
 echo "Errors are logged to: $LOG_DIR/host.log"
 echo "Done. Reload the extension and reopen the panel."

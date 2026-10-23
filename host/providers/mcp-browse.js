@@ -4,7 +4,9 @@
 // the router's Unix socket (BYO_BRIDGE) to the panel, which runs it in the browser.
 
 const net = require("net");
-const { TOOLS } = require("./tools");
+const { pick } = require("./tools");
+
+const TOOLS = pick(process.env.BYO_TOOLS ? process.env.BYO_TOOLS.split(",") : null);
 
 const REQUEST = process.env.BYO_REQUEST;
 const sock = net.connect(process.env.BYO_BRIDGE);

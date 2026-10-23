@@ -56,7 +56,7 @@ function make({ id, label, keyName, baseUrl, filter = () => true }) {
               model: req.model,
               messages,
               stream: true,
-              ...(browse && calls < MAX_CALLS && { tools: openaiTools() }),
+              ...(browse && calls < MAX_CALLS && { tools: openaiTools(callbacks.toolNames) }),
             }),
           });
           if (!res.ok) throw new Error(await failure(res));

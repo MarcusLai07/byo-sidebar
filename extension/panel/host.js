@@ -39,6 +39,10 @@ export function connect() {
           .then((res) => port?.postMessage({ type: "tool_result", id: msg.id, callId: msg.callId, ...res }));
         return;
       }
+      if (msg.type === "tool_activity") {
+        r.activity?.(msg); // progress from tools the router runs itself (video transcripts)
+        return;
+      }
       if (msg.type === "delta") r.delta(msg.text);
       else if (msg.type === "session") r.session?.(msg.value);
       else if (msg.type === "done" || msg.type === "error") {

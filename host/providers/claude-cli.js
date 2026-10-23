@@ -5,19 +5,20 @@ const { exists, output, runJsonl } = require("./cli");
 const { SYSTEM_PROMPT } = require("./prompt");
 const { anthropicContent, withTranscript } = require("./http");
 const path = require("path");
-const { TOOLS, MAX_CALLS, BROWSE_PROMPT } = require("./tools");
+const { MAX_CALLS, BROWSE_PROMPT, pick } = require("./tools");
 
 const BIN = process.env.BYO_CLAUDE_BIN || "claude";
 
-function browseArgs(requestId) {
+function browseArgs(requestId, names) {
+  const tools = pick(names);
   const server = {
     command: process.execPath, // the router's own node
     args: [path.join(__dirname, "mcp-browse.js")],
-    env: { BYO_BRIDGE: process.env.BYO_BRIDGE, BYO_REQUEST: requestId },
+    env: { BYO_BRIDGE: process.env.BYO_BRIDGE, BYO_REQUEST: requestId, BYO_TOOLS: tools.map((t) => t.name).join(",") },
   };
   return [
     "--mcp-config", JSON.stringify({ mcpServers: { browse: server } }),
-    "--allowedTools", TOOLS.map((t) => `mcp__browse__${t.name}`).join(","),
+    "--allowedTools", tools.map((t) => `mcp__browse__${t.name}`).join(","),
     "--max-turns", String(MAX_CALLS + 1),
   ];
 }
@@ -60,7 +61,7 @@ module.exports = {
       "--setting-sources", "",
       "--strict-mcp-config",
       // Browsing: only our read-only MCP tools, which call back into the browser.
-      ...(callbacks.tool ? browseArgs(req.id) : []),
+      ...(callbacks.tool ? browseArgs(req.id, callbacks.toolNames) : []),
       "--system-prompt", callbacks.tool ? `${SYSTEM_PROMPT} ${BROWSE_PROMPT}` : SYSTEM_PROMPT,
       "--model", model,
       ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
@@ -69,7 +70,11 @@ module.exports = {
     const stdin = JSON.stringify({ type: "user", message: { role: "user", content } }) + "\n";
 
     let wrote = false;
-    return runJsonl(BIN, args, { stdin }, (ev, { delta, done, error }) => {
+    // Local transcription can take minutes: let MCP tool calls run up to 30 min. And keep
+    // big results (transcripts, long pages) inline: over the limit Claude Code saves them
+    // to a file the model can't open here, since its file tools are off.
+    const env = callbacks.tool ? { MCP_TOOL_TIMEOUT: String(30 * 60 * 1000), MAX_MCP_OUTPUT_TOKENS: "60000" } : undefined;
+    return runJsonl(BIN, args, { stdin, env }, (ev, { delta, done, error }) => {
       // After a tool call Claude starts a new message: keep its text apart from the last one.
       if (ev.type === "stream_event" && ev.event?.type === "message_start" && wrote) delta("\n\n");
       const d = ev.type === "stream_event" && ev.event?.type === "content_block_delta" && ev.event.delta;

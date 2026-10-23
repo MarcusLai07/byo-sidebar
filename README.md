@@ -14,6 +14,21 @@ Bring your own AI to your browser's sidebar. A Chromium extension (built for peo
 - **No API key needed for Claude:** it can use your signed-in [Claude Code](https://claude.com/claude-code) CLI, with all tools disabled.
 - Everything runs on your machine; questions go only to the model provider you pick.
 
+**Timestamps for any YouTube video**, even without chapters or timestamped comments. When the page has none, the chat fetches a timestamped transcript through the local router:
+1. YouTube's own captions via [yt-dlp](https://github.com/yt-dlp/yt-dlp), usually in about 10 seconds;
+2. otherwise it downloads the audio and transcribes it on your Mac with [Parakeet](https://github.com/senstella/parakeet-mlx) (English and European languages, about a minute per hour of audio) or [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (any language, a few minutes per hour);
+3. with a Gemini API key it can also have Gemini watch the video, which hears music too and helps with DJ sets.
+
+Transcripts are cached in `~/Library/Caches/byo-sidebar/transcripts`. To enable it:
+
+```bash
+brew install yt-dlp ffmpeg whisper.cpp
+uv tool install parakeet-mlx   # optional, faster for English and European audio
+./host/install.sh
+```
+
+The first local transcription downloads a model: about 1.6 GB for whisper.cpp (set `BYO_WHISPER_MODEL=ggml-small.bin` before `install.sh` for a smaller one), or 2.5 GB for Parakeet.
+
 On YouTube the sidebar reads the full description and the top ~40 comments (untruncated) straight from YouTube's data, so nothing needs expanding or scrolling. For the spoken words too, open **Show transcript** under the video: YouTube blocks extensions from fetching captions directly. On other sites, text folded behind "read more" or closed sections is included as well.
 
 > Not affiliated with The Browser Company or Dia. Browsers don't let extensions replace their built-in UI, so this runs in the extension side panel (or a docked window where side panels aren't supported).
@@ -65,7 +80,7 @@ Side panel (extension/)  ──native messaging──▶  host/router.js  ──
 
 The panel (`extension/panel/`) owns the conversation and saves chats in IndexedDB. API providers get the history with every request; CLI providers resume their own session, or get the conversation replayed as text after an edit, a regenerate or a model switch.
 
-Browsing tools are defined in `host/providers/tools.js` and run in the panel (`extension/panel/tools.js`). API providers call them through their native tool-use APIs. Claude Code gets them from a small MCP server (`host/providers/mcp-browse.js`) that relays calls to the router over a Unix socket. Codex and Gemini CLI logins don't browse yet.
+Browsing tools are defined in `host/providers/tools.js` and run in the panel (`extension/panel/tools.js`). API providers call them through their native tool-use APIs. Claude Code gets them from a small MCP server (`host/providers/mcp-browse.js`) that relays calls to the router over a Unix socket. `video_transcript` and `gemini_watch` run in the router itself (`host/video.js`) and are only offered when yt-dlp or a Gemini key is available. Codex and Gemini CLI logins don't browse yet.
 
 The media strip (`extension/media.js`) needs no router: it reads and drives `<video>`/`<audio>` elements and the page's Media Session info directly. To support another site's skip buttons, add its selectors to `ADAPTERS`.
 

@@ -433,6 +433,7 @@ async function respond(userMsg, sourceTab, { retried = false } = {}) {
     fillTools(toolBox, msg);
     scrollDown();
   };
+  const routerRows = new Map(); // activityId -> row, for tools the router runs
   const runTool = createRunner({
     seen,
     activity(label) {
@@ -505,6 +506,18 @@ async function respond(userMsg, sourceTab, { retried = false } = {}) {
       },
       session: (value) => (chat.cliSession = value),
       tool: browse ? runTool : null,
+      activity: ({ activityId, label, note, status }) => {
+        let t = routerRows.get(activityId);
+        if (!t) {
+          t = { label, status: "running" };
+          routerRows.set(activityId, t);
+          (msg.tools ??= []).push(t);
+        }
+        if (label) t.label = label;
+        t.note = note;
+        t.status = status;
+        showTools();
+      },
       done: () => finish(),
       error: (e) => finish(e),
     }

@@ -11,7 +11,7 @@ export const BUILTIN = [
   { id: "translate", name: "Translate", prompt: "Translate {selection} into {input}. If no language is given, use English. Return only the translation." },
   { id: "compare", name: "Compare tabs", prompt: "Compare {tabs}: the key points of each, where they agree, and where they differ. {input}" },
   { id: "actions", name: "Action items", prompt: "List the action items, decisions, deadlines and owners in {tab}. {input}" },
-  { id: "timestamps", name: "Timestamps", prompt: "List the chapters, topics or songs in the video on {tab} with their timestamps (m:ss) and a short label each. Use the transcript, description and comments. {input}" },
+  { id: "timestamps", name: "Timestamps", prompt: "List the chapters, topics or songs in the video on {tab} with their timestamps (m:ss) and a short label each. Use the description, comments and transcript; if none of them has timestamps, get the video's transcript with your tools. {input}" },
   { id: "eli5", name: "ELI5", prompt: "Explain {tab} like I'm five. {input}" },
   { id: "factcheck", name: "Fact check", prompt: "Point out claims in {tab} that look doubtful or need a source, and say why. {input}" },
 ];

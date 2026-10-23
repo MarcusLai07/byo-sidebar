@@ -49,7 +49,7 @@ module.exports = {
             messages,
             stream: true,
             // Out of tool calls: no tools offered, so the model has to answer.
-            ...(browse && calls < MAX_CALLS && { tools: anthropicTools() }),
+            ...(browse && calls < MAX_CALLS && { tools: anthropicTools(callbacks.toolNames) }),
           }),
         });
         if (!res.ok) throw new Error(await failure(res));

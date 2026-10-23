@@ -81,6 +81,14 @@
             send({ type: "delta", id: msg.id, text });
             send({ type: "done", id: msg.id });
           })();
+        } else if (msg.type === "chat" && msg.browse && /transcribe/i.test(msg.prompt)) {
+          // Fake router-side tool progress (video_transcript).
+          const act = (status, label, note, delay) => setTimeout(() => onMessage.fire({ type: "tool_activity", id: msg.id, activityId: "a1", status, label, note }), delay);
+          act("running", "Downloading the audio", "40%", 10);
+          act("running", "Transcribing with whisper.cpp", "75%", 60);
+          act("done", undefined, undefined, 110);
+          setTimeout(() => onMessage.fire({ type: "delta", id: msg.id, text: "0:14 the elephants." }), 140);
+          setTimeout(() => onMessage.fire({ type: "done", id: msg.id }), 160);
         } else if (msg.type === "chat") {
           const chunks = reply.match(/[\s\S]{1,12}/g);
           chunks.forEach((c, i) => setTimeout(() => onMessage.fire({ type: "delta", id: msg.id, text: c }), 10 + i * 8));
