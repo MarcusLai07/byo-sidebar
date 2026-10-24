@@ -138,6 +138,14 @@ async function handle(msg) {
     return;
   }
 
+  // Instant actions in the panel can use the router's own tools directly (no model).
+  if (msg.type === "local_tool") {
+    if (!isLocal(msg.name)) return send({ type: "local_result", id: msg.id, content: `Unknown tool ${msg.name}`, isError: true });
+    const r = await runLocalTool(msg.id, msg.name, msg.input || {});
+    send({ type: "local_result", id: msg.id, ...r });
+    return;
+  }
+
   if (msg.type === "tool_result") {
     pendingTools.get(msg.callId)?.({ content: String(msg.content ?? ""), isError: !!msg.isError });
     return;

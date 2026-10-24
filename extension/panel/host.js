@@ -32,6 +32,11 @@ export function connect() {
       return;
     }
     const r = msg.id && requests.get(msg.id);
+    if (r && msg.type === "local_result") {
+      requests.delete(msg.id);
+      msg.isError ? r.error(msg.content) : r.done(msg.content);
+      return;
+    }
     if (r) {
       if (msg.type === "tool_call") {
         // The model wants to browse: run the tool here and send the result back.
@@ -86,4 +91,17 @@ export function chat(request, handlers) {
     if (!requests.delete(id)) return;
     port?.postMessage({ type: "cancel", id });
   };
+}
+
+// Run one of the router's own tools (e.g. video_transcript) without a model.
+// activity(msg) receives progress rows. Resolves with the tool's text.
+export function localTool(name, input, { activity } = {}) {
+  return new Promise((resolve, reject) => {
+    const id = crypto.randomUUID();
+    requests.set(id, { activity, done: resolve, error: (m) => reject(new Error(m)), delta() {} });
+    if (!post({ type: "local_tool", id, name, input })) {
+      requests.delete(id);
+      reject(new Error("The local router isn't running."));
+    }
+  });
 }

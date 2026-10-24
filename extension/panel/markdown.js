@@ -14,7 +14,8 @@ function inline(s, opts) {
   s = escape(s)
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, "$1<em>$2</em>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    .replace(/(^|[\s(])_([^_\s][^_]*?)_(?=[\s).,!?:;]|$)/g, "$1<em>$2</em>")
+    .replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:|tel:)[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   if (opts.timestamps) {
     s = s.replace(TIMESTAMP, (_, pre, all, h, m, sec) => {
       const t = (Number(h) || 0) * 3600 + Number(m) * 60 + Number(sec);
@@ -39,7 +40,10 @@ export function renderMarkdown(src, opts = {}) {
     para = [];
   };
   const flushList = () => {
-    if (list) out.push(`<${list.tag}>${list.items.map((i) => `<li>${inline(i, opts)}</li>`).join("")}</${list.tag}>`);
+    if (list) {
+      const items = list.items.map((i) => `<li${i.depth ? ` class="d${Math.min(i.depth, 3)}"` : ""}>${inline(i.text, opts)}</li>`);
+      out.push(`<${list.tag}>${items.join("")}</${list.tag}>`);
+    }
     list = null;
   };
 
@@ -94,13 +98,13 @@ export function renderMarkdown(src, opts = {}) {
       continue;
     }
 
-    const item = line.match(/^\s*([-*]|\d+\.)\s+(.*)/);
+    const item = line.match(/^(\s*)([-*]|\d+\.)\s+(.*)/);
     if (item) {
       flushPara();
-      const tag = /\d/.test(item[1]) ? "ol" : "ul";
+      const tag = /\d/.test(item[2]) ? "ol" : "ul";
       if (list && list.tag !== tag) flushList();
       if (!list) list = { tag, items: [] };
-      list.items.push(item[2]);
+      list.items.push({ depth: Math.floor(item[1].length / 2), text: item[3] }); // nested items keep their indent
       continue;
     }
 

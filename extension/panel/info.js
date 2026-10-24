@@ -2,6 +2,7 @@
 
 import * as skills from "./skills.js";
 import * as ctx from "./context.js";
+import * as motion from "./motion.js";
 
 const KEY_PROVIDERS = [
   { name: "anthropic", label: "Anthropic", placeholder: "sk-ant-…", url: "https://console.anthropic.com/settings/keys" },
@@ -42,13 +43,34 @@ function el(tag, props = {}, ...children) {
   return e;
 }
 
+const CHEVRON = '<svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>';
+
 function section(id, title, ...body) {
-  const d = el("details", { class: "acc", "data-id": id }, el("summary", {}, title), el("div", { class: "acc-body" }, ...body));
+  const summary = el("summary", {}, el("span", {}, title));
+  summary.insertAdjacentHTML("beforeend", CHEVRON);
+  const content = el("div", { class: "acc-body" }, ...body);
+  const d = el("details", { class: "acc", "data-id": id }, summary, content);
   d.open = open().includes(id);
-  d.addEventListener("toggle", () => {
+  // Animate instead of the instant native toggle: open, then grow; shrink, then close.
+  let busy = false;
+  summary.addEventListener("click", async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    busy = true;
+    const opening = !d.open;
+    if (opening) {
+      d.open = true;
+      await motion.expand(content);
+    } else {
+      d.classList.add("closing");
+      await motion.collapse(content);
+      d.open = false;
+      d.classList.remove("closing");
+    }
     const ids = new Set(open());
-    d.open ? ids.add(id) : ids.delete(id);
+    opening ? ids.add(id) : ids.delete(id);
     setOpen([...ids]);
+    busy = false;
   });
   return d;
 }
@@ -70,7 +92,7 @@ function keysSection({ keys, post }) {
       input,
       el("button", {}, "Save")
     );
-    return el("div", {}, form, el("a", { class: "key-link", href: p.url, target: "_blank", rel: "noopener" }, keys[p.name] ? "Manage key ↗" : "Get a key ↗"));
+    return el("div", {}, form, el("a", { class: "key-link", href: p.url, target: "_blank", rel: "noopener" }, keys[p.name] ? "Manage key " : "Get a key ", el("span", { class: "ne" }, "↗")));
   });
   return [
     el("p", { class: "hint" }, "Stored only on this Mac in ~/.config/lumen/config.json. Save an empty box to remove a key."),
@@ -243,7 +265,7 @@ export function renderInfo(container, deps) {
       el("dl", { class: "guide" }, ...GUIDE.flatMap(([t, d]) => [el("dt", {}, t), el("dd", {}, d)]))),
     section("about", "About",
       el("p", {}, `Lumen ${chrome.runtime.getManifest().version}. Your chats, keys and history stay on this Mac; questions go only to the model you pick.`),
-      el("p", {}, el("a", { href: "https://github.com/MarcusLai07/lumen", target: "_blank", rel: "noopener" }, "Source code ↗")))
+      el("p", {}, el("a", { class: "key-link", href: "https://github.com/MarcusLai07/lumen", target: "_blank", rel: "noopener" }, "Source code ", el("span", { class: "ne" }, "↗"))))
   );
   container.scrollTop = scroll;
 }

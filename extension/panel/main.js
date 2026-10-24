@@ -13,7 +13,7 @@ import { renderHistory } from "./history.js";
 import { renderMedia } from "./saver.js";
 import { renderExtensions } from "./extensions.js";
 import * as motion from "./motion.js";
-import * as techstack from "./techstack.js";
+import { INSTANT } from "./instant.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -313,6 +313,15 @@ function actions(list, lead) {
 
 // Timestamp links jump the video in the tab the question was about.
 els.messages.addEventListener("click", async (e) => {
+  // Links to a spot on the page the answer is about (outline headings) jump in that tab.
+  const link = e.target.closest("a[href]:not(.ts)");
+  const owner = link && state.chat?.messages[link.closest(".msg")?.dataset.index];
+  if (link && owner?.sourceTabId && owner.sourceUrl && link.href.startsWith(owner.sourceUrl.split("#")[0] + "#")) {
+    e.preventDefault();
+    const tab = await chrome.tabs.update(owner.sourceTabId, { url: link.href, active: true }).catch(() => null);
+    if (tab) chrome.windows.update(tab.windowId, { focused: true });
+    return;
+  }
   const a = e.target.closest("a.ts");
   if (!a) return;
   e.preventDefault();
@@ -324,23 +333,24 @@ els.messages.addEventListener("click", async (e) => {
 
 // ---------- local actions (no AI) ----------
 
-// Tech stack: detected on this device and added to the chat as Lumen's own answer.
-// The user turn's prompt carries the list too, so a follow-up question sees it.
-async function runTechStack() {
+// An instant action runs on this device (no model, no tokens) and its answer joins the
+// chat as Lumen's own message. The user turn's prompt says so, and the answer's text is
+// in the history, so a follow-up question can use it.
+async function runInstant(action) {
   if (state.pending) return;
   const tab = await ctx.activeTab();
-  if (!tab) return toast("No tab to inspect.");
+  if (!tab) return toast("No tab to work with.");
   if (state.view) showView(state.view);
   state.chat ??= newChatObject();
   const chat = state.chat;
-  const userMsg = { role: "user", display: "Detect tech stack", prompt: "", labels: [`📎 ${tab.title}`] };
+  const userMsg = { role: "user", display: action.name, prompt: "", labels: [`📎 ${tab.title}`] };
   chat.messages.push(userMsg);
   els.empty.hidden = true;
   const userEl = messageEl(userMsg, chat.messages.length - 1);
   els.messages.append(userEl);
   motion.popIn(userEl, { from: 10, scale: 0.9 });
 
-  const msg = { role: "assistant", text: "", model: "Lumen · on this device, no AI", local: true };
+  const msg = { role: "assistant", text: "", model: "Lumen · instant, no AI", local: true };
   chat.messages.push(msg);
   const el = messageEl(msg, chat.messages.length - 1);
   el.classList.add("streaming");
@@ -348,18 +358,28 @@ async function runTechStack() {
   motion.popIn(el, { from: 6, scale: 0.98 });
   const stop = motion.thinking(el.querySelector(".body"));
   scrollDown();
+
+  // Progress rows from router tools (e.g. "Reading YouTube auto captions").
+  const rows = new Map();
+  const activity = ({ activityId, label, note, status }) => {
+    let t = rows.get(activityId);
+    if (!t) rows.set(activityId, (t = { label, status }));
+    Object.assign(t, label ? { label } : {}, { note, status });
+    (msg.tools ??= []).includes(t) || msg.tools.push(t);
+    fillTools(el.querySelector(".tools"), msg);
+  };
   try {
-    const result = await techstack.detect(tab);
-    msg.text = techstack.toMarkdown(result);
-    userMsg.prompt = `Detect the tech stack of ${tab.url}. (Lumen detected it locally; its answer follows.)`;
+    const out = await action.run(tab, { localTool: (name, input) => host.localTool(name, input, { activity }) });
+    msg.text = out.text;
+    if (out.sourceTab) Object.assign(msg, { sourceTabId: out.sourceTab.id, sourceUrl: out.sourceTab.url });
+    userMsg.prompt = `${action.name} for ${tab.url}. (Lumen did this itself, without a model; its answer follows.)`;
   } catch (e) {
     msg.error = e.message;
-    userMsg.prompt = `Detect the tech stack of ${tab.url}.`;
+    userMsg.prompt = `${action.name} for ${tab.url}.`;
   }
   stop();
   el.replaceWith(messageEl(msg, chat.messages.indexOf(msg)));
-  // The model's next turn can't resume a CLI session that never saw these turns.
-  chat.needsReplay = true;
+  chat.needsReplay = true; // a CLI session never saw these turns
   scrollDown();
   await persist();
 }
@@ -416,7 +436,11 @@ async function openSkillsMenu() {
     localStorage.setItem("infoOpen", JSON.stringify([...new Set([...JSON.parse(localStorage.getItem("infoOpen") || "[]"), "skills"])]));
     if (state.view !== "info") showView("info");
   });
-  const heading = (text) => Object.assign(document.createElement("div"), { className: "menu-heading", textContent: text });
+  const heading = (text, note) => {
+    const h = Object.assign(document.createElement("div"), { className: "menu-heading", textContent: text });
+    if (note) h.append(Object.assign(document.createElement("span"), { className: "tag", textContent: note }));
+    return h;
+  };
   // Things the sidebar does (not prompts), kept apart from the skills.
   const action = (name, sub, run) => {
     const b = document.createElement("button");
@@ -436,13 +460,23 @@ async function openSkillsMenu() {
     });
     return b;
   };
-  const actions = [
-    action("Detect tech stack", "Frameworks, CMS, analytics, hosting… found on this device, no AI or tokens", () => runTechStack()),
+  const tab = await ctx.activeTab();
+  const instant = INSTANT.filter((a) => a.when(tab)).map((a) => action(a.name, a.sub, () => runInstant(a)));
+  instant.forEach((b) => b.classList.add("instant"));
+  const tools = [
     action("Save images & videos", "Download what's on this page, or attach images", () => state.view !== "media" && showView("media")),
     action("Screenshot this tab", "Attach what's visible right now", async () => addAttachment(await ctx.screenshot())),
     action("Upload a file", "Images, PDFs or text", () => els.fileInput.click()),
   ];
-  els.skillsMenu.replaceChildren(heading("Actions"), ...actions, heading("Skills"), ...list.map(item), manage);
+  els.skillsMenu.replaceChildren(
+    heading("Instant", "no tokens"),
+    ...instant,
+    heading("Tools"),
+    ...tools,
+    heading("AI skills", "uses tokens"),
+    ...list.map(item),
+    manage
+  );
   const r = els.skillsBtn.getBoundingClientRect();
   els.skillsMenu.style.top = `${r.bottom + 8}px`;
   els.skillsMenu.style.left = `${Math.max(8, r.left - 6)}px`;

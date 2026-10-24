@@ -660,8 +660,7 @@ footer {
 }
 
 .acc summary::-webkit-details-marker { display: none; }
-.acc summary::after { content: "›"; float: right; color: var(--muted); transition: transform 0.15s; }
-.acc[open] summary::after { transform: rotate(90deg); }
+.acc summary { display: flex; align-items: center; justify-content: space-between; }
 .acc-body { padding: 10px 12px 12px; }
 .acc-body h3 { margin: 4px 0 4px; font-size: 12.5px; }
 .acc-body h3:not(:first-child) { margin-top: 16px; }
@@ -1040,3 +1039,67 @@ button.refresh.spinning { animation: spin 0.6s linear infinite; }
 .msg.assistant.streaming .body:has(.thinking)::after { content: none; }
 #send { transition: background 0.2s; }
 
+
+/* ---------- chevrons and arrows (springy, n8n-style) ---------- */
+
+.chev {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), stroke 0.2s;
+}
+
+.acc[open]:not(.closing) > summary .chev { transform: rotate(180deg); stroke: var(--accent); }
+.acc summary:hover .chev { stroke: var(--fg); }
+
+.body li.d1 { margin-left: 14px; }
+.body li.d2 { margin-left: 28px; }
+.body li.d3 { margin-left: 42px; }
+
+.dropdown .menu-heading { display: flex; gap: 6px; align-items: center; }
+.dropdown .menu-heading .tag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.dropdown .item.instant strong::before { content: "⚡"; margin-right: 6px; color: var(--accent); }
+
+/* Shared spring for arrow motion: a quick move with a slight overshoot. */
+:root { --spring: cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+.select-wrap { position: relative; display: flex; flex: 1; min-width: 0; }
+.select-wrap #model { flex: 1; padding-right: 30px; appearance: none; -webkit-appearance: none; cursor: pointer; }
+.select-wrap .chev { position: absolute; right: 11px; top: 50%; translate: 0 -50%; pointer-events: none; }
+.select-wrap:focus-within .chev { transform: rotate(180deg); stroke: var(--accent); }
+.select-wrap:hover .chev { stroke: var(--fg); }
+
+.media-toggle { display: grid; place-items: center; }
+.media-toggle.flipped .chev { transform: rotate(180deg); }
+.media-toggle:hover .chev { stroke: var(--fg); }
+
+/* ↗ links: the arrow lifts up and right on hover. */
+.ne { display: inline-block; transition: transform 0.4s var(--spring); }
+a:hover .ne,
+button:hover .ne { transform: translate(2px, -2px); }
+
+/* › on actions nudges right; the send arrow lifts. */
+.dropdown .item.action strong::before { display: inline-block; transition: transform 0.4s var(--spring); }
+.dropdown .item.action:hover strong::before { transform: translateX(3px); }
+#send { transition: transform 0.4s var(--spring), background 0.2s; }
+#send:not(.stop):hover { transform: translateY(-2px); }
+.history-item .open { transition: transform 0.4s var(--spring); }
+.history-item:hover .open { transform: translateX(2px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .chev, .ne, .dropdown .item.action strong::before, #send, .history-item .open { transition: none !important; }
+}

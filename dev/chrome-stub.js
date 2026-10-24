@@ -182,7 +182,12 @@
           window.__seek = { tabId: target.tabId, seconds: args[0] };
           return Promise.resolve([{ frameId: 0, result: true }]);
         }
-        return Promise.resolve([{ frameId: 0, result: null }]);
+        // Anything else runs against this test page itself (outline, links, contacts…).
+        try {
+          return Promise.resolve(func(...args)).then((result) => [{ frameId: 0, result: result ?? null }]);
+        } catch {
+          return Promise.resolve([{ frameId: 0, result: null }]);
+        }
       },
     },
     downloads: {

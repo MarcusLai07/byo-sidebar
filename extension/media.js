@@ -195,8 +195,11 @@
 
   async function setCollapsed(on) {
     const m = window.lumenMotion;
+    // Flip the chevron on the current button first: the strip redraws, so a new
+    // button would appear already flipped and never animate.
+    els.list.querySelector(".media-toggle")?.classList.toggle("flipped", on);
     const old = [...els.list.querySelectorAll(".media-cards, .media-pills, .player")];
-    if (m) await m.leave(old, { y: on ? 6 : -6, scale: 0.95, duration: 150 });
+    if (m) await Promise.all([m.leave(old, { y: on ? 6 : -6, scale: 0.95, duration: 150 }), new Promise((r) => setTimeout(r, 320))]);
     collapsed = on;
     focusId = null;
     try {
@@ -300,8 +303,9 @@
     const label = document.createElement("span");
     const playing = players.filter((p) => !p.state.paused).length;
     label.textContent = `${players.length} player${players.length === 1 ? "" : "s"}${playing ? ` · ${playing} playing` : ""}`;
-    const toggle = button(collapsed ? "⌃" : "⌄", collapsed ? "Show all players" : "Minimize", () => setCollapsed(!collapsed));
-    toggle.className = "media-toggle";
+    const toggle = button("", collapsed ? "Show all players" : "Minimize", () => setCollapsed(!collapsed));
+    toggle.className = `media-toggle${collapsed ? " flipped" : ""}`;
+    toggle.innerHTML = '<svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>';
     head.append(label, toggle);
 
     const body = [];

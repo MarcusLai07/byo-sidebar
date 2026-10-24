@@ -212,6 +212,12 @@ export async function readTab(tab, { limit = PAGE_LIMIT, youtube = "full" } = {}
 
 export const readMentionedTab = (tab) => readTab(tab, { limit: TAB_LIMIT, youtube: "brief" });
 
+// Description, channel and top comments of a YouTube video tab.
+export async function youtubeDetails(tabId, count = 100) {
+  const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func: youtubeData, args: [count] });
+  return result || { description: "", channel: "", comments: [] };
+}
+
 // More YouTube comments for the browsing tool.
 export async function youtubeComments(tabId, count) {
   const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func: youtubeData, args: [count] });

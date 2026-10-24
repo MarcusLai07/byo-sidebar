@@ -14,7 +14,12 @@
 - **Media strip:** an Arc-style mini player for every tab with audio or video (play/pause, next/previous or ±10s, seek, mute, jump to tab), in two columns when there's more than one. Minimize it to small tabs and click one to open just that player; ✕ pauses and hides a player. Next/previous use the site's own buttons on YouTube, YouTube Music, Spotify and SoundCloud.
 - **No API key needed for Claude:** it can use your signed-in [Claude Code](https://claude.com/claude-code) CLI, with all tools disabled.
 - **Extensions manager:** the puzzle button lists every extension installed in the browser, with on/off switches, options, details and remove (always through the browser's own confirmation).
-- **Tech stack detection, no AI:** ⚡ → *Detect tech stack* lists the page's frameworks, libraries, CMS, analytics, ads, hosting/CDN, payments and more (about 95 fingerprints, Lumen's own, MIT), from page globals, scripts, HTML and response headers. It runs on your machine and costs no tokens; follow-up questions see the list.
+- **Instant actions, no AI, no tokens** (⚡ menu → *Instant*): Lumen works these out itself on your machine:
+  - *Detect tech stack*: frameworks, libraries, CMS, analytics, ads, hosting/CDN, payments… from about 100 of Lumen's own fingerprints (MIT), each linked to its homepage.
+  - *Video timestamps*: the chapter list or tracklist from the description or top comments, with clickable times (YouTube).
+  - *Video transcript*: captions via the router's yt-dlp, or a local transcription (YouTube).
+  - *Page outline* (headings that jump to their spot), *Links on this page*, *Contacts on this page* (emails, phones, social profiles), *Page info* (reading time, dates, language).
+  Follow-up questions can see these answers; only the follow-up uses tokens. The *AI skills* group is separate and marked as using tokens.
 - **Glass design and motion:** rounded, translucent glass surfaces over a slowly drifting glow, in light and dark, with springy entrances and matching exits by [anime.js](https://animejs.com) (v4.5, MIT, bundled in `extension/vendor/`). Motion turns off when your system asks for reduced motion.
 - Everything runs on your machine; questions go only to the model provider you pick.
 

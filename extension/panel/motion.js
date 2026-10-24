@@ -151,6 +151,40 @@ export function menuOut(menu) {
   });
 }
 
+// Accordion body opening: height grows from 0 with a soft spring, content fades up.
+export function expand(body) {
+  if (!on()) return Promise.resolve();
+  const h = body.scrollHeight;
+  body.style.overflow = "hidden";
+  return new Promise((resolve) => {
+    const done = () => {
+      body.style.removeProperty("height");
+      body.style.removeProperty("overflow");
+      resolve();
+    };
+    animate(body, { height: [0, h], ease: springy(0.18, 480) }).then(done);
+    animate(body.children, { opacity: [0, 1], translateY: [-6, 0], delay: stagger(30, { start: 60 }), duration: 320, ease: "out(3)" });
+    setTimeout(done, 900);
+  });
+}
+
+// Accordion body closing: content fades, then height folds to 0.
+export function collapse(body) {
+  if (!on()) return Promise.resolve();
+  body.style.overflow = "hidden";
+  return new Promise((resolve) => {
+    const done = () => {
+      body.style.removeProperty("height");
+      body.style.removeProperty("overflow");
+      [...body.children].forEach(reset);
+      resolve();
+    };
+    animate(body.children, { opacity: 0, duration: 120, ease: "in(2)" });
+    animate(body, { height: [body.offsetHeight, 0], duration: 260, ease: "inOut(3)" }).then(done);
+    setTimeout(done, 600);
+  });
+}
+
 // Remove inline styles left by animations so CSS takes over again.
 export function reset(el) {
   if (!el) return;
