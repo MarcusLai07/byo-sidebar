@@ -5,25 +5,14 @@
 import * as ctx from "./context.js";
 import * as techstack from "./techstack.js";
 
-const host = (url) => {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-};
+const host = ctx.hostOf;
 const isYouTubeVideo = (tab) => /^https:\/\/(www\.|m\.)?youtube\.com\/watch/.test(tab?.url || "");
 const isWeb = (tab) => /^https?:/.test(tab?.url || "");
 const mdText = (s) => String(s).replace(/([[\]`*_|])/g, "\\$1").replace(/\s+/g, " ").trim();
 
-async function inPage(tab, func, args = []) {
-  try {
-    const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func, args });
-    return result;
-  } catch {
-    throw new Error("This page can't be read by extensions.");
-  }
-}
+const inPage = (tab, func) => ctx.inPage(tab.id, func).catch(() => {
+  throw new Error("This page can't be read by extensions.");
+});
 
 // ---------- page scripts (run in the tab) ----------
 
@@ -34,22 +23,6 @@ function outlineScript() {
     .map((h) => ({ level: Number(h.tagName[1]), text: h.textContent.replace(/\s+/g, " ").trim().slice(0, 140), id: h.id || h.closest("[id]")?.id || "" }));
 }
 
-function allLinksScript() {
-  const seen = new Set();
-  const out = [];
-  for (const a of document.querySelectorAll("a[href]")) {
-    if (!/^https?:/.test(a.href)) continue;
-    const href = a.href.split("#")[0];
-    if (seen.has(href)) continue;
-    const text = (a.innerText || a.getAttribute("aria-label") || a.title || "").replace(/\s+/g, " ").trim();
-    if (!text) continue;
-    seen.add(href);
-    out.push({ text: text.slice(0, 90), href });
-    if (out.length >= 300) break;
-  }
-  return { links: out, origin: location.origin };
-}
-
 function contactsScript() {
   const text = document.body.innerText;
   const emails = new Set();
@@ -57,7 +30,10 @@ function contactsScript() {
   const socials = new Map();
   for (const a of document.querySelectorAll("a[href]")) {
     const h = a.getAttribute("href") || "";
-    if (h.startsWith("mailto:")) emails.add(decodeURIComponent(h.slice(7).split("?")[0]));
+    if (h.startsWith("mailto:")) {
+      const e = h.slice(7).split("?")[0];
+      try { emails.add(decodeURIComponent(e)); } catch { emails.add(e); }
+    }
     if (h.startsWith("tel:")) phones.add(h.slice(4).replace(/[^\d+]/g, ""));
     const m = a.href.match(/^https?:\/\/(?:www\.)?(x\.com|twitter\.com|facebook\.com|instagram\.com|linkedin\.com|tiktok\.com|youtube\.com|github\.com|t\.me|wa\.me|discord\.gg|threads\.net)\/[^?#\s]+/i);
     if (m && !socials.has(m[0])) socials.set(m[0], m[1].toLowerCase());
@@ -181,11 +157,12 @@ export const INSTANT = [
     sub: "Every link, this site's first",
     when: isWeb,
     async run(tab) {
-      const { links, origin } = await inPage(tab, allLinksScript);
+      const links = await ctx.pageLinks(tab.id, 300);
       if (!links.length) return { text: "No links on this page." };
-      const inside = links.filter((l) => l.href.startsWith(origin));
-      const outside = links.filter((l) => !l.href.startsWith(origin));
-      const list = (ls) => ls.slice(0, 80).map((l) => `- [${mdText(l.text)}](${l.href})`);
+      const origin = new URL(tab.url).origin;
+      const inside = links.filter(([, href]) => href.startsWith(origin));
+      const outside = links.filter(([, href]) => !href.startsWith(origin));
+      const list = (ls) => ls.slice(0, 80).map(([text, href]) => `- [${mdText(text)}](${href})`);
       return {
         text: [
           `**${links.length} links** on ${host(tab.url)}`,

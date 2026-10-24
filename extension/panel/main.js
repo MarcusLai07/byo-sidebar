@@ -62,7 +62,8 @@ const state = {
   attachments: [], // for the next message
   quote: null, // text from right-click "Ask about selection"
   editIndex: null, // index of the user message being edited
-  pending: null, // { cancel, msg, el }
+  pending: null, // { cancel, msg, finish, stop } while a reply (or instant action) runs
+  sending: false, // true while a message is being put together, before its reply starts
   view: null, // null (chat) | "history" | "info"
   menu: null, // open "/" or "@" menu: { kind, items, index, start }
 };
@@ -74,7 +75,7 @@ host.on("hello", (msg) => {
   state.providers = msg.providers;
   state.keys = msg.keys || {};
   state.logins = msg.logins || [];
-  fillModels();
+  fillModels(els.model.value);
   if (state.view === "info") showInfo();
   if (!state.providers.length) showBanner("No models connected yet. Open ⓘ to connect a login or add an API key.");
 });
@@ -85,8 +86,9 @@ host.on("down", ({ error }) => {
 
 // ---------- models ----------
 
-function fillModels() {
-  const wanted = state.chat?.providerId ? `${state.chat.providerId}::${state.chat.modelId}` : localStorage.getItem("model");
+// keep: the model to stay on (a router restart shouldn't undo the pick you just made).
+function fillModels(keep) {
+  const wanted = keep || (state.chat?.providerId ? `${state.chat.providerId}::${state.chat.modelId}` : localStorage.getItem("model"));
   els.model.innerHTML = "";
   for (const provider of state.providers) {
     const group = document.createElement("optgroup");
@@ -122,6 +124,17 @@ els.model.addEventListener("change", () => {
   updateModelLabel();
 });
 
+// A menu row: <button class="item"><span><strong>title</strong><small>sub</small></span></button>.
+function itemButton(title, sub, { className = "", role } = {}) {
+  const b = Object.assign(document.createElement("button"), { type: "button", className: `item ${className}`.trim() });
+  if (role) b.setAttribute("role", role);
+  const t = document.createElement("span");
+  if (title != null) t.append(Object.assign(document.createElement("strong"), { textContent: title }));
+  if (sub != null) t.append(Object.assign(document.createElement("small"), { textContent: sub }));
+  b.append(t);
+  return b;
+}
+
 // ---------- model menu (Lumen's own, instead of the native select popup) ----------
 
 function openModelMenu() {
@@ -131,15 +144,10 @@ function openModelMenu() {
   for (const g of groups) {
     nodes.push(Object.assign(document.createElement("div"), { className: "menu-heading", textContent: g.label }));
     for (const o of g.querySelectorAll("option")) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = `item${o.disabled ? " err" : ""}`;
-      b.setAttribute("role", "option");
+      const b = o.disabled ? itemButton(null, o.textContent, { className: "err", role: "option" }) : itemButton(o.textContent, null, { role: "option" });
       b.setAttribute("aria-selected", String(o.selected && !o.disabled));
       b.dataset.value = o.value;
-      const label = document.createElement("span");
-      label.append(Object.assign(document.createElement(o.disabled ? "small" : "strong"), { textContent: o.textContent }));
-      b.append(label, Object.assign(document.createElement("span"), { className: "check", textContent: "✓" }));
+      b.append(Object.assign(document.createElement("span"), { className: "check", textContent: "✓" }));
       if (!o.disabled) b.addEventListener("click", () => chooseModel(o.value));
       nodes.push(b);
     }
@@ -158,17 +166,19 @@ function openModelMenu() {
   els.modelMenu.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
 }
 
-let closingModel = false;
-async function closeModelMenu() {
-  if (!els.modelMenu.classList.contains("open") || closingModel) return;
-  closingModel = true;
-  els.modelBtn.setAttribute("aria-expanded", "false");
-  await motion.menuOut(els.modelMenu);
-  els.modelMenu.classList.remove("open");
-  els.modelMenu.querySelectorAll("*").forEach(motion.reset);
-  motion.reset(els.modelMenu);
-  closingModel = false;
+// Plays a dropdown's exit, then hides it.
+async function closeDropdown(menu, btn) {
+  if (!menu.classList.contains("open") || menu.dataset.closing) return;
+  menu.dataset.closing = "1";
+  btn.classList.remove("on");
+  btn.setAttribute("aria-expanded", "false");
+  await motion.menuOut(menu);
+  menu.classList.remove("open");
+  menu.querySelectorAll("*").forEach(motion.reset);
+  motion.reset(menu);
+  delete menu.dataset.closing;
 }
+const closeModelMenu = () => closeDropdown(els.modelMenu, els.modelBtn);
 
 function chooseModel(value) {
   if (els.model.value !== value) {
@@ -301,8 +311,7 @@ async function openChat(id) {
   showView(state.view); // close the history view
 }
 
-async function persist() {
-  const chat = state.chat;
+async function persist(chat = state.chat) {
   if (!chat?.messages.length) return;
   const first = chat.messages.find((m) => m.role === "user");
   if (chat.title === "New chat" && first) chat.title = first.display.replace(/\s+/g, " ").slice(0, 80) || "Chat";
@@ -432,13 +441,26 @@ els.messages.addEventListener("click", async (e) => {
   if (!ok) toast("No video or audio found in that tab.");
 });
 
+// Progress rows for tools the router runs (e.g. "Reading YouTube auto captions"),
+// one per activityId, updated as its status changes.
+function routerActivity(msg, show) {
+  const rows = new Map();
+  return ({ activityId, label, note, status }) => {
+    let t = rows.get(activityId);
+    if (!t) rows.set(activityId, (t = { label, status }));
+    Object.assign(t, label ? { label } : {}, { note, status });
+    (msg.tools ??= []).includes(t) || msg.tools.push(t);
+    show();
+  };
+}
+
 // ---------- local actions (no AI) ----------
 
 // An instant action runs on this device (no model, no tokens) and its answer joins the
 // chat as Lumen's own message. The user turn's prompt says so, and the answer's text is
 // in the history, so a follow-up question can use it.
 async function runInstant(action) {
-  if (state.pending) return;
+  if (state.pending || state.sending) return;
   const tab = await ctx.activeTab();
   if (!tab) return toast("No tab to work with.");
   if (state.view) showView(state.view);
@@ -457,32 +479,36 @@ async function runInstant(action) {
   el.classList.add("streaming");
   els.messages.append(el);
   motion.popIn(el, { from: 6, scale: 0.98 });
-  const stop = motion.thinking(el.querySelector(".body"));
+  const stopThinking = motion.thinking(el.querySelector(".body"));
   scrollDown();
 
-  // Progress rows from router tools (e.g. "Reading YouTube auto captions").
-  const rows = new Map();
-  const activity = ({ activityId, label, note, status }) => {
-    let t = rows.get(activityId);
-    if (!t) rows.set(activityId, (t = { label, status }));
-    Object.assign(t, label ? { label } : {}, { note, status });
-    (msg.tools ??= []).includes(t) || msg.tools.push(t);
-    fillTools(el.querySelector(".tools"), msg);
+  // Like a reply: ■, New chat or opening another chat stops it, and it's saved either way.
+  let stopped = false;
+  const finish = async (error) => {
+    if (state.pending?.msg !== msg) return;
+    state.pending = null;
+    setBusy(false);
+    stopThinking();
+    if (error) msg.error = error;
+    el.replaceWith(messageEl(msg, chat.messages.indexOf(msg)));
+    chat.needsReplay = true; // a CLI session never saw these turns
+    scrollDown();
+    await persist(chat);
   };
+  state.pending = { msg, finish, cancel: () => {}, stop: () => (stopped = true) };
+  setBusy(true);
+
+  const activity = routerActivity(msg, () => fillTools(el.querySelector(".tools"), msg));
   try {
     const out = await action.run(tab, { localTool: (name, input) => host.localTool(name, input, { activity }) });
     msg.text = out.text;
     if (out.sourceTab) Object.assign(msg, { sourceTabId: out.sourceTab.id, sourceUrl: out.sourceTab.url });
     userMsg.prompt = `${action.name} for ${tab.url}. (Lumen did this itself, without a model; its answer follows.)`;
   } catch (e) {
-    msg.error = e.message;
+    if (!stopped) msg.error = e.message;
     userMsg.prompt = `${action.name} for ${tab.url}.`;
   }
-  stop();
-  el.replaceWith(messageEl(msg, chat.messages.indexOf(msg)));
-  chat.needsReplay = true; // a CLI session never saw these turns
-  scrollDown();
-  await persist();
+  if (!stopped) await finish(msg.error);
 }
 
 // ---------- skills dropdown (⚡ next to the model) ----------
@@ -491,21 +517,13 @@ async function openSkillsMenu() {
   closeModelMenu();
   const list = await skills.allSkills();
   const item = (s) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "item";
-    b.setAttribute("role", "menuitem");
-    const t = document.createElement("span");
-    const name = document.createElement("strong");
-    name.textContent = s.name;
-    const sub = document.createElement("small");
-    sub.textContent = s.prompt
+    const sub = s.prompt
       .replace(/\{(\w+)\}/g, (_, v) => ({ tab: "this page", tabs: "your tabs", selection: "the selection", input: "…" })[v] ?? "")
       .replace(/…\./g, "…")
       .replace(/\s+([.,:])/g, "$1")
       .replace(/\s{2,}/g, " ")
       .trim();
-    t.append(name, sub);
+    const b = itemButton(s.name, sub, { role: "menuitem" });
     // Click runs it now; the pencil adds it to the box so you can add details first.
     const edit = document.createElement("span");
     edit.className = "add";
@@ -518,7 +536,7 @@ async function openSkillsMenu() {
       renderChips();
       els.input.focus();
     });
-    b.append(t, edit);
+    b.append(edit);
     b.addEventListener("click", () => {
       closeSkillsMenu();
       if (state.view) showView(state.view);
@@ -529,10 +547,7 @@ async function openSkillsMenu() {
     });
     return b;
   };
-  const manage = document.createElement("button");
-  manage.type = "button";
-  manage.className = "item manage";
-  manage.textContent = "Manage skills…";
+  const manage = Object.assign(document.createElement("button"), { type: "button", className: "item manage", textContent: "Manage skills…" });
   manage.addEventListener("click", () => {
     closeSkillsMenu();
     localStorage.setItem("infoOpen", JSON.stringify([...new Set([...JSON.parse(localStorage.getItem("infoOpen") || "[]"), "skills"])]));
@@ -540,13 +555,7 @@ async function openSkillsMenu() {
   });
   // Things the sidebar does (not prompts), kept apart from the skills.
   const action = (name, sub, run) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "item action";
-    b.setAttribute("role", "menuitem");
-    const t = document.createElement("span");
-    t.append(Object.assign(document.createElement("strong"), { textContent: name }), Object.assign(document.createElement("small"), { textContent: sub }));
-    b.append(t);
+    const b = itemButton(name, sub, { className: "action", role: "menuitem" });
     b.addEventListener("click", async () => {
       closeSkillsMenu();
       try {
@@ -617,19 +626,7 @@ async function openSkillsMenu() {
   els.skillsBtn.setAttribute("aria-expanded", "true");
 }
 
-let closingMenu = false;
-async function closeSkillsMenu() {
-  if (!els.skillsMenu.classList.contains("open") || closingMenu) return;
-  closingMenu = true;
-  els.skillsBtn.classList.remove("on");
-  await motion.menuOut(els.skillsMenu);
-  els.skillsMenu.classList.remove("open");
-  els.skillsMenu.querySelectorAll("*").forEach(motion.reset);
-  motion.reset(els.skillsMenu);
-  closingMenu = false;
-  els.skillsBtn.classList.remove("on");
-  els.skillsBtn.setAttribute("aria-expanded", "false");
-}
+const closeSkillsMenu = () => closeDropdown(els.skillsMenu, els.skillsBtn);
 
 els.skillsBtn.addEventListener("click", () => (els.skillsMenu.classList.contains("open") ? closeSkillsMenu() : openSkillsMenu()));
 document.addEventListener("click", (e) => {
@@ -723,7 +720,7 @@ function dedupe(tabs, skipId) {
 }
 
 async function send(text) {
-  if (state.pending) return;
+  if (state.pending || state.sending) return;
   const { providerId } = currentModel();
   if (!providerId) return showBanner("Pick a model first: open ⓘ to connect a login or add an API key.");
   if (!text && !state.skill && !state.attachments.length) return;
@@ -738,7 +735,16 @@ async function send(text) {
     cancelEdit();
   }
 
-  const built = await buildMessage(text);
+  // Reading the tab can take a few seconds: block a second send meanwhile, and drop
+  // this one if you switch chats before it's ready.
+  state.sending = true;
+  let built;
+  try {
+    built = await buildMessage(text);
+  } finally {
+    state.sending = false;
+  }
+  if (state.chat !== chat) return;
   const userMsg = { role: "user", display: built.display, prompt: built.prompt, labels: built.labels, attachments: built.attachments, pages: built.pages };
   chat.messages.push(userMsg);
   clearComposerContext();
@@ -751,14 +757,14 @@ async function send(text) {
     motion.popIn(el, { from: 10, scale: 0.9 });
     scrollDown();
   }
-  await respond(userMsg, built.sourceTab);
+  await respond(chat, userMsg, built.sourceTab);
 }
 
 // History for API models (and for replaying into a fresh CLI session): the text of
 // every earlier turn, merged so roles alternate.
-function historyBefore(index) {
+function historyBefore(chat, index) {
   const out = [];
-  for (const m of state.chat.messages.slice(0, index)) {
+  for (const m of chat.messages.slice(0, index)) {
     const content = m.role === "user" ? m.prompt : m.text;
     if (!content) continue;
     const last = out[out.length - 1];
@@ -768,8 +774,7 @@ function historyBefore(index) {
   return out;
 }
 
-async function respond(userMsg, sourceTab, { retried = false } = {}) {
-  const chat = state.chat;
+async function respond(chat, userMsg, sourceTab, { retried = false } = {}) {
   const { providerId, modelId, label } = currentModel();
   const index = chat.messages.indexOf(userMsg);
 
@@ -800,7 +805,6 @@ async function respond(userMsg, sourceTab, { retried = false } = {}) {
     fillTools(toolBox, msg);
     scrollDown();
   };
-  const routerRows = new Map(); // activityId -> row, for tools the router runs
   const runTool = createRunner({
     seen,
     activity(label) {
@@ -847,12 +851,12 @@ async function respond(userMsg, sourceTab, { retried = false } = {}) {
       chat.messages.splice(chat.messages.indexOf(msg), 1);
       el.remove();
       chat.needsReplay = true;
-      return respond(userMsg, sourceTab, { retried: true });
+      return respond(chat, userMsg, sourceTab, { retried: true });
     }
     if (error) msg.error = error;
     else chat.needsReplay = false;
     el.replaceWith(messageEl(msg, chat.messages.indexOf(msg)));
-    await persist();
+    await persist(chat);
   };
 
   // Registered before the request goes out: if the router is down, the error arrives synchronously.
@@ -866,7 +870,7 @@ async function respond(userMsg, sourceTab, { retried = false } = {}) {
       resume,
       browse,
       prompt: userMsg.prompt,
-      history: resume ? [] : historyBefore(index),
+      history: resume ? [] : historyBefore(chat, index),
       attachments: (userMsg.attachments || []).filter((a) => a.kind === "image" || a.kind === "pdf"),
     },
     {
@@ -876,18 +880,7 @@ async function respond(userMsg, sourceTab, { retried = false } = {}) {
       },
       session: (value) => (chat.cliSession = value),
       tool: browse ? runTool : null,
-      activity: ({ activityId, label, note, status }) => {
-        let t = routerRows.get(activityId);
-        if (!t) {
-          t = { label, status: "running" };
-          routerRows.set(activityId, t);
-          (msg.tools ??= []).push(t);
-        }
-        if (label) t.label = label;
-        t.note = note;
-        t.status = status;
-        showTools();
-      },
+      activity: routerActivity(msg, showTools),
       done: () => finish(),
       error: (e) => finish(e),
     }
@@ -903,7 +896,7 @@ function stop() {
 }
 
 function regenerate(index) {
-  if (state.pending) return;
+  if (state.pending || state.sending) return;
   const chat = state.chat;
   const userIndex = index - 1;
   const userMsg = chat.messages[userIndex];
@@ -912,11 +905,11 @@ function regenerate(index) {
   chat.messages = chat.messages.slice(0, index);
   chat.needsReplay = true;
   renderAll();
-  respond(userMsg, old?.sourceTabId ? { id: old.sourceTabId, url: old.sourceUrl } : null);
+  respond(chat, userMsg, old?.sourceTabId ? { id: old.sourceTabId, url: old.sourceUrl } : null);
 }
 
 function startEdit(index) {
-  if (state.pending) return;
+  if (state.pending || state.sending) return;
   const msg = state.chat.messages[index];
   state.editIndex = index;
   els.input.value = msg.display;
@@ -959,13 +952,16 @@ function hideBanner() {
 }
 
 let toastTimer = 0;
+let toastId = 0;
 function toast(text) {
   els.toast.textContent = text;
   els.toast.hidden = false;
   motion.toastIn(els.toast);
   clearTimeout(toastTimer);
+  const shown = ++toastId;
   toastTimer = setTimeout(async () => {
     await motion.leave(els.toast, { y: 14, scale: 0.92, duration: 200 });
+    if (shown !== toastId) return; // a newer toast came up while this one left
     els.toast.hidden = true;
     motion.reset(els.toast);
   }, 2600);
@@ -1014,6 +1010,7 @@ function renderChips() {
     x.textContent = "✕";
     x.title = "Remove";
     x.addEventListener("click", async () => {
+      x.disabled = true; // a double click would remove the next chip too
       await motion.leave(c, { y: 0, scale: 0.7, duration: 140 });
       onRemove();
     });
@@ -1022,12 +1019,12 @@ function renderChips() {
   };
   if (state.skill) add(`/${state.skill.name}`, state.skill.prompt, () => ((state.skill = null), renderChips()));
   if (state.quote) add(`“${state.quote.slice(0, 40)}${state.quote.length > 40 ? "…" : ""}”`, state.quote, () => ((state.quote = null), renderChips()));
-  state.mentions.forEach((m, i) => {
+  state.mentions.forEach((m) => {
     const name = m.type === "tab" ? m.tab.title : `${m.group.title || "Tab group"} (${m.group.tabs.length})`;
-    add(`@ ${name}`, name, () => (state.mentions.splice(i, 1), renderChips()));
+    add(`@ ${name}`, name, () => ((state.mentions = state.mentions.filter((x) => x !== m)), renderChips()));
   });
-  state.attachments.forEach((a, i) => {
-    add(`${a.kind === "image" ? "🖼" : "📄"} ${a.name}`, a.name, () => (state.attachments.splice(i, 1), renderChips()));
+  state.attachments.forEach((a) => {
+    add(`${a.kind === "image" ? "🖼" : "📄"} ${a.name}`, a.name, () => ((state.attachments = state.attachments.filter((x) => x !== a)), renderChips()));
   });
 }
 
@@ -1047,7 +1044,9 @@ function addAttachment(a) {
 
 // ---------- composer: "/" and "@" menus ----------
 
+let menuSeq = 0;
 async function updateMenu() {
+  const seq = ++menuSeq; // only the latest keystroke's results may open the menu
   const before = els.input.value.slice(0, els.input.selectionStart);
   const skillMatch = before.match(/(?:^|\s)\/([\w-]*)$/);
   const tabMatch = before.match(/(?:^|\s)@([^\s@]*)$/);
@@ -1056,7 +1055,7 @@ async function updateMenu() {
     const items = (await skills.allSkills())
       .filter((s) => !q || skills.slug(s.name).includes(q) || s.id.includes(q))
       .map((s) => ({ kind: "skill", skill: s, title: s.name, sub: s.prompt }));
-    openMenu("skill", items, before.length - q.length - 1);
+    if (seq === menuSeq) openMenu("skill", items, before.length - q.length - 1);
   } else if (tabMatch) {
     const q = tabMatch[1].toLowerCase();
     const [tabs, groups] = await Promise.all([ctx.windowTabs(), ctx.tabGroups()]);
@@ -1064,7 +1063,7 @@ async function updateMenu() {
       ...groups.map((g) => ({ kind: "group", group: g, title: `${g.title || "Untitled group"} · ${g.tabs.length} tabs`, sub: "Tab group" })),
       ...tabs.map((t) => ({ kind: "tab", tab: t, title: t.title || t.url, sub: new URL(t.url).hostname, icon: t.favIconUrl })),
     ].filter((i) => !q || i.title.toLowerCase().includes(q) || (i.sub || "").toLowerCase().includes(q));
-    openMenu("tab", items, before.length - q.length - 1);
+    if (seq === menuSeq) openMenu("tab", items, before.length - q.length - 1);
   } else closeMenu();
 }
 
@@ -1078,23 +1077,8 @@ function drawMenu() {
   const m = state.menu;
   els.popover.replaceChildren(
     ...m.items.map((item, i) => {
-      const row = document.createElement("button");
-      row.type = "button";
-      row.className = `item${i === m.index ? " active" : ""}`;
-      row.setAttribute("role", "option");
-      if (item.icon) {
-        const img = document.createElement("img");
-        img.src = item.icon;
-        img.alt = "";
-        row.append(img);
-      }
-      const text = document.createElement("span");
-      const title = document.createElement("strong");
-      title.textContent = item.title;
-      const sub = document.createElement("small");
-      sub.textContent = item.sub || "";
-      text.append(title, sub);
-      row.append(text);
+      const row = itemButton(item.title, item.sub || "", { className: i === m.index ? "active" : "", role: "option" });
+      if (item.icon) row.prepend(Object.assign(document.createElement("img"), { src: item.icon, alt: "" }));
       row.addEventListener("mousedown", (e) => {
         e.preventDefault();
         pick(i);
@@ -1163,6 +1147,7 @@ els.composer.addEventListener("submit", (e) => {
   e.preventDefault();
   motion.press(els.send);
   if (state.pending) return stop();
+  if (state.sending) return;
   const q = els.input.value.trim();
   els.input.value = "";
   autosize();
@@ -1220,23 +1205,14 @@ async function openAttachMenu() {
     const h = document.createElement("div");
     h.className = "menu-heading";
     h.textContent = "Recent downloads";
-    items.push(h, ...downloads.map((d) => menuButton(d.name, formatSize(d.size), async () => addAttachment(await ctx.fetchAttachment(d.url, d.name)))));
+    items.push(h, ...downloads.map((d) => menuButton(d.name, ctx.formatBytes(d.size), async () => addAttachment(await ctx.fetchAttachment(d.url, d.name)))));
   }
   els.attachMenu.replaceChildren(...items);
   els.attachMenu.hidden = false;
 }
 
 function menuButton(title, sub, fn) {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.className = "item";
-  const t = document.createElement("span");
-  const strong = document.createElement("strong");
-  strong.textContent = title;
-  const small = document.createElement("small");
-  small.textContent = sub || "";
-  t.append(strong, small);
-  b.append(t);
+  const b = itemButton(title, sub || "");
   b.addEventListener("click", async () => {
     els.attachMenu.hidden = true;
     try {
@@ -1246,11 +1222,6 @@ function menuButton(title, sub, fn) {
     }
   });
   return b;
-}
-
-export function formatSize(bytes) {
-  if (!bytes) return "";
-  return bytes > 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`;
 }
 
 els.attach.addEventListener("click", openAttachMenu);
@@ -1280,9 +1251,11 @@ els.mic.addEventListener("click", () => {
 
 // ---------- actions from the right-click menu and the address bar ----------
 
+let lastAction = 0; // startup and the change listener can both see the same action
 async function runPendingAction() {
   const { pendingAction: a } = await chrome.storage.session.get("pendingAction");
-  if (!a || Date.now() - a.at > 60000) return;
+  if (!a || a.at === lastAction || Date.now() - a.at > 60000) return;
+  lastAction = a.at;
   await chrome.storage.session.remove("pendingAction");
   if (state.view) showView(state.view);
   if (a.selection) state.quote = a.selection;

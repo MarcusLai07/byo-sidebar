@@ -38,11 +38,6 @@ module.exports = {
 
   logins: () => Promise.all(all.filter((p) => p.login).map(loginState)),
 
-  isUsable: (id) => {
-    const p = all.find((x) => x.id === id);
-    return p ? usable(p) : false;
-  },
-
   async available() {
     const checks = all.map(async (p) => {
       if (!(await usable(p))) return null;

@@ -245,6 +245,7 @@ if (chrome.downloads?.onChanged) {
 }
 
 function downloadsSection({ attach, toast }) {
+  let tick = 0;
   const list = el("div", { class: "download-list" }, el("p", { class: "hint" }, "Loading…"));
   const draw = async () => {
     const items = await ctx.recentDownloads(12, { includeActive: true }).catch(() => []);
@@ -258,7 +259,7 @@ function downloadsSection({ attach, toast }) {
             el("strong", {}, d.name),
             el("small", {}, d.active
               ? `Downloading${d.progress != null ? ` ${Math.floor(d.progress * 100)}%` : "…"}`
-              : [size(d.size), new Date(d.time).toLocaleDateString()].filter(Boolean).join(" · "))),
+              : [ctx.formatBytes(d.size), new Date(d.time).toLocaleDateString()].filter(Boolean).join(" · "))),
           d.active
             ? null
             : el("div", { class: "row-actions" },
@@ -275,7 +276,9 @@ function downloadsSection({ attach, toast }) {
       )
     );
     // Keep a running download's percentage moving even between change events.
-    if (items.some((d) => d.active)) setTimeout(() => redrawDownloads === draw && draw(), 1000);
+    // One timer at a time, however many events trigger a redraw.
+    clearTimeout(tick);
+    if (items.some((d) => d.active)) tick = setTimeout(() => redrawDownloads === draw && draw(), 1000);
   };
   redrawDownloads = draw;
   draw();
@@ -286,8 +289,6 @@ function downloadsSection({ attach, toast }) {
     list,
   ];
 }
-
-const size = (b) => (!b ? "" : b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`);
 
 // ---------- render ----------
 

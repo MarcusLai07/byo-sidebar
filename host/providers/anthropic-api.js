@@ -1,7 +1,7 @@
 // Claude via the Anthropic API, with your own key.
 
 const config = require("../config");
-const { sse, failure, anthropicContent, history, run } = require("./http");
+const { sse, request, once, anthropicContent, history, run } = require("./http");
 const { SYSTEM_PROMPT } = require("./prompt");
 const { MAX_CALLS, BROWSE_PROMPT, anthropicTools } = require("./tools");
 
@@ -12,8 +12,6 @@ const headers = () => ({
   "content-type": "application/json",
 });
 
-let cachedModels = null;
-
 module.exports = {
   id: "anthropic-api",
   label: "Claude (API key)",
@@ -21,14 +19,10 @@ module.exports = {
 
   isAvailable: async () => !!config.getKey("anthropic"),
 
-  async models() {
-    if (cachedModels) return cachedModels;
-    const res = await fetch(`${API}/models?limit=100`, { headers: headers() });
-    if (!res.ok) throw new Error(await failure(res));
-    const { data } = await res.json();
-    cachedModels = data.map((m) => ({ id: m.id, label: m.display_name || m.id }));
-    return cachedModels;
-  },
+  models: once(async () => {
+    const { data } = await (await request(`${API}/models?limit=100`, headers())).json();
+    return data.map((m) => ({ id: m.id, label: m.display_name || m.id }));
+  }),
 
   chat(req, callbacks) {
     const browse = !!callbacks.tool;
@@ -38,21 +32,15 @@ module.exports = {
     return run(async function* (signal) {
       let wrote = false;
       for (let calls = 0; ; ) {
-        const res = await fetch(`${API}/messages`, {
-          method: "POST",
-          headers: headers(),
-          signal,
-          body: JSON.stringify({
-            model: req.model,
-            max_tokens: 8192,
-            system,
-            messages,
-            stream: true,
-            // Out of tool calls: no tools offered, so the model has to answer.
-            ...(browse && calls < MAX_CALLS && { tools: anthropicTools(callbacks.toolNames) }),
-          }),
-        });
-        if (!res.ok) throw new Error(await failure(res));
+        const res = await request(`${API}/messages`, headers(), {
+          model: req.model,
+          max_tokens: 8192,
+          system,
+          messages,
+          stream: true,
+          // Out of tool calls: no tools offered, so the model has to answer.
+          ...(browse && calls < MAX_CALLS && { tools: anthropicTools(callbacks.toolNames) }),
+        }, signal);
 
         const blocks = [];
         let stop = null;

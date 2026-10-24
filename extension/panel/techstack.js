@@ -9,7 +9,9 @@
 //   header: { name: regex } over the page's HTTP response headers
 //   cookie: a regex over cookie names
 
-export const FINGERPRINTS = [
+import { hostOf, inPage } from "./context.js";
+
+const FINGERPRINTS = [
   // JavaScript frameworks
   { name: "React", url: "https://react.dev", cat: "JavaScript frameworks", global: ["React.version"], dom: "[data-reactroot]", react: true },
   { name: "Next.js", url: "https://nextjs.org", cat: "JavaScript frameworks", global: ["next.version", "__NEXT_DATA__"], script: /\/_next\/static\// },
@@ -126,7 +128,7 @@ export const FINGERPRINTS = [
 
 // Runs in the page (main world, so page globals are visible). No eval: many sites'
 // CSPs forbid it, so checks are plain property paths and selectors.
-export function collect(checks) {
+function collect(checks) {
   const get = (path) => {
     let v = window;
     for (const k of path.split(".")) {
@@ -180,25 +182,18 @@ async function headersOf(url) {
 
 const versionFrom = (m) => (m && m[1] && /\d/.test(m[1]) ? m[1] : "");
 
-export const checksFor = () =>
-  FINGERPRINTS.filter((f) => f.global || f.dom || f.domAttr || f.react).map(({ name, global, dom, domAttr, react }) => ({ name, global, dom, domAttr, react }));
-
 // Returns { url, found: [{ name, cat, version }] } for a tab.
 export async function detect(tab) {
-  const checks = checksFor();
-  let page = { js: {}, scripts: [], html: "", generator: "", metaNames: "", cookies: [] };
-  try {
-    const frames = await chrome.scripting.executeScript({ target: { tabId: tab.id }, world: "MAIN", func: collect, args: [checks] });
-    page = frames[0]?.result || page;
-  } catch {
+  const checks = FINGERPRINTS.filter((f) => f.global || f.dom || f.domAttr || f.react).map(({ name, global, dom, domAttr, react }) => ({ name, global, dom, domAttr, react }));
+  const page = (await inPage(tab.id, collect, [checks], "MAIN").catch(() => {
     throw new Error("This page can't be read by extensions.");
-  }
+  })) || { js: {}, scripts: [], html: "", generator: "", metaNames: "", cookies: [] };
   const headers = /^https?:/.test(tab.url) ? await headersOf(tab.url) : {};
   return { url: tab.url, title: tab.title, found: match(page, headers) };
 }
 
 // Turns what collect() saw (plus response headers) into detected technologies.
-export function match(page, headers = {}) {
+function match(page, headers = {}) {
   const found = [];
   for (const f of FINGERPRINTS) {
     let hit = false;
@@ -234,13 +229,7 @@ export function match(page, headers = {}) {
 
 // Markdown for the chat, grouped by category.
 export function toMarkdown({ url, found }) {
-  const host = (() => {
-    try {
-      return new URL(url).hostname.replace(/^www\./, "");
-    } catch {
-      return url;
-    }
-  })();
+  const host = hostOf(url);
   if (!found.length) return `**${host}**: no known technologies detected. (Detected on this device, no AI.)`;
   const groups = {};
   for (const f of found) (groups[f.cat] ??= []).push(f);

@@ -2,7 +2,7 @@
 // so one implementation covers all three API-key providers.
 
 const config = require("../config");
-const { sse, failure, openaiContent, history, run } = require("./http");
+const { sse, request, once, openaiContent, history, run } = require("./http");
 const { SYSTEM_PROMPT } = require("./prompt");
 const { MAX_CALLS, BROWSE_PROMPT, openaiTools } = require("./tools");
 
@@ -11,7 +11,6 @@ const OPENAI_SKIP = /audio|realtime|tts|transcribe|image|search|embedding|instru
 const GEMINI_SKIP = /embedding|tts|image|live|aqa|imagen|veo/;
 
 function make({ id, label, keyName, baseUrl, filter = () => true }) {
-  let cachedModels = null;
   const headers = () => ({
     authorization: `Bearer ${config.getKey(keyName)}`,
     "content-type": "application/json",
@@ -24,18 +23,14 @@ function make({ id, label, keyName, baseUrl, filter = () => true }) {
 
     isAvailable: async () => !!config.getKey(keyName),
 
-    async models() {
-      if (cachedModels) return cachedModels;
-      const res = await fetch(`${baseUrl}/models`, { headers: headers() });
-      if (!res.ok) throw new Error(await failure(res));
-      const { data } = await res.json();
-      cachedModels = data
+    models: once(async () => {
+      const { data } = await (await request(`${baseUrl}/models`, headers())).json();
+      return data
         .map((m) => m.id.replace(/^models\//, ""))
         .filter(filter)
         .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
         .map((m) => ({ id: m, label: m }));
-      return cachedModels;
-    },
+    }),
 
     chat(req, callbacks) {
       const browse = !!callbacks.tool;
@@ -48,18 +43,12 @@ function make({ id, label, keyName, baseUrl, filter = () => true }) {
       return run(async function* (signal) {
         let wrote = false;
         for (let calls = 0; ; ) {
-          const res = await fetch(`${baseUrl}/chat/completions`, {
-            method: "POST",
-            headers: headers(),
-            signal,
-            body: JSON.stringify({
-              model: req.model,
-              messages,
-              stream: true,
-              ...(browse && calls < MAX_CALLS && { tools: openaiTools(callbacks.toolNames) }),
-            }),
-          });
-          if (!res.ok) throw new Error(await failure(res));
+          const res = await request(`${baseUrl}/chat/completions`, headers(), {
+            model: req.model,
+            messages,
+            stream: true,
+            ...(browse && calls < MAX_CALLS && { tools: openaiTools(callbacks.toolNames) }),
+          }, signal);
 
           let text = "";
           const toolCalls = [];

@@ -38,6 +38,19 @@ async function failure(response) {
   }
 }
 
+// fetch that throws the API's own error message; with a body it POSTs it as JSON.
+async function request(url, headers, body, signal) {
+  const res = await fetch(url, body ? { method: "POST", headers, signal, body: JSON.stringify(body) } : { headers });
+  if (!res.ok) throw new Error(await failure(res));
+  return res;
+}
+
+// Model lists are fetched once per router process (a key change starts a new one).
+const once = (fn) => {
+  let value;
+  return async () => (value ??= await fn());
+};
+
 // Anthropic Messages API content blocks (also accepted by `claude -p --input-format stream-json`).
 function anthropicContent({ prompt, attachments = [] }) {
   const blocks = attachments.map((a) =>
@@ -87,4 +100,4 @@ function run(stream, { delta, done, error }) {
   return () => controller.abort();
 }
 
-module.exports = { sse, failure, anthropicContent, openaiContent, history, withTranscript, run };
+module.exports = { sse, request, once, anthropicContent, openaiContent, history, withTranscript, run };

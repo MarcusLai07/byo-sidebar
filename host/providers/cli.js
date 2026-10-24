@@ -57,6 +57,7 @@ function runJsonl(bin, args, { stdin, env }, onEvent, { delta, done, error }) {
     else cb.error(stderr.trim().split("\n").filter(Boolean).pop() || `${path.basename(bin)} exited with code ${code}`);
   });
 
+  child.stdin.on("error", () => {}); // EPIPE if the CLI exits before reading its input
   child.stdin.end(stdin ?? "");
 
   return () => {

@@ -1,8 +1,26 @@
 // Reading context from tabs: page text, selection, YouTube captions, PDFs, screenshots.
 
-export const PAGE_LIMIT = 40000;
+const PAGE_LIMIT = 40000;
 const TAB_LIMIT = 12000; // per @-mentioned tab
-export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+// "example.com" for https://www.example.com/page (the input back if it isn't a URL).
+export const hostOf = (url) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url || "";
+  }
+};
+
+export const formatBytes = (b) =>
+  !b ? "" : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`;
+
+// Run func(...args) in a tab's top frame and return what it returns.
+export async function inPage(tabId, func, args = [], world = "ISOLATED") {
+  const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, world, func, args });
+  return result;
+}
 
 export async function activeTab() {
   // In window mode the panel's own window is focused, so look at normal windows only.
@@ -145,16 +163,17 @@ const toBase64 = (buf) => {
 
 // Fetch a URL as an attachment (image or PDF). Throws with a readable message.
 export async function fetchAttachment(url, name) {
-  if (!/^https?:|^file:/.test(url)) throw new Error("Only web and file URLs can be attached.");
+  if (!/^https?:|^file:|^data:/.test(url)) throw new Error("Only web and file URLs can be attached.");
   const res = await fetch(url, { credentials: "include" }).catch(() => {
     throw new Error(url.startsWith("file:")
       ? "Can't read local files: turn on “Allow access to file URLs” for Lumen in the extensions page."
       : "Couldn't download it.");
   });
   if (!res.ok) throw new Error(`Couldn't download it (${res.status}).`);
+  if (Number(res.headers.get("content-length")) > MAX_ATTACHMENT_BYTES) throw new Error("That file is too large (max 25 MB).");
   const mime = (res.headers.get("content-type") || "").split(";")[0].trim() || guessMime(url);
   const buf = await res.arrayBuffer();
-  return fromBytes(buf, mime, name || decodeURIComponent(url.split(/[?#]/)[0].split("/").pop() || "file"));
+  return fromBytes(buf, mime, name || (url.startsWith("data:") ? "image" : decodeURIComponent(url.split(/[?#]/)[0].split("/").pop() || "file")));
 }
 
 export function guessMime(name) {
@@ -177,7 +196,7 @@ export function fromBytes(buf, mime, name) {
 export async function readTab(tab, { limit = PAGE_LIMIT, youtube = "full" } = {}) {
   const out = { tab, text: "", selection: "", youtube: null, pdf: null, unreadable: false };
   try {
-    const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: pageScript, args: [limit] });
+    const result = await inPage(tab.id, pageScript, [limit]);
     Object.assign(out, { text: result.text, selection: result.selection, duration: result.duration });
   } catch {
     out.unreadable = true;
@@ -196,13 +215,7 @@ export async function readTab(tab, { limit = PAGE_LIMIT, youtube = "full" } = {}
   }
   if (youtube && /^https:\/\/(www\.|m\.)?youtube\.com\/watch/.test(tab.url)) {
     try {
-      const [{ result }] = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        world: "MAIN",
-        func: youtubeData,
-        args: [youtube === "full" ? 40 : 15],
-      });
-      out.youtube = result;
+      out.youtube = await inPage(tab.id, youtubeData, [youtube === "full" ? 40 : 15], "MAIN");
     } catch {
       // not a readable watch page
     }
@@ -214,21 +227,14 @@ export const readMentionedTab = (tab) => readTab(tab, { limit: TAB_LIMIT, youtub
 
 // Description, channel and top comments of a YouTube video tab.
 export async function youtubeDetails(tabId, count = 100) {
-  const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func: youtubeData, args: [count] });
-  return result || { description: "", channel: "", comments: [] };
-}
-
-// More YouTube comments for the browsing tool.
-export async function youtubeComments(tabId, count) {
-  const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, world: "MAIN", func: youtubeData, args: [count] });
-  return result?.comments || [];
+  return (await inPage(tabId, youtubeData, [count], "MAIN")) || { description: "", channel: "", comments: [] };
 }
 
 function linksScript(max) {
   const seen = new Set();
   const out = [];
   for (const a of document.querySelectorAll("a[href]")) {
-    const href = a.href;
+    const href = a.href.split("#")[0];
     if (!/^https?:/.test(href) || seen.has(href)) continue;
     const text = (a.innerText || a.getAttribute("aria-label") || a.title || "").replace(/\s+/g, " ").trim().slice(0, 100);
     if (!text) continue;
@@ -241,12 +247,7 @@ function linksScript(max) {
 
 // Links on a page as [text, url] pairs, for following with the browsing tool.
 export async function pageLinks(tabId, max = 80) {
-  try {
-    const [{ result }] = await chrome.scripting.executeScript({ target: { tabId }, func: linksScript, args: [max] });
-    return result || [];
-  } catch {
-    return [];
-  }
+  return (await inPage(tabId, linksScript, [max]).catch(() => null)) || [];
 }
 
 const attr = (s) => String(s || "").replace(/"/g, "'");
@@ -275,7 +276,6 @@ export async function screenshot() {
   return { kind: "image", mime: "image/jpeg", name: `Screenshot of ${tab.title || "tab"}`, data: url.split(",")[1] };
 }
 
-// Recent finished downloads that can be attached.
 // Recent downloads that can be attached; with { includeActive } also ones still downloading.
 export async function recentDownloads(limit = 12, { includeActive = false } = {}) {
   if (!chrome.downloads) return [];
@@ -308,13 +308,13 @@ function seekScript(seconds) {
 }
 
 export async function seekTab(tabId, url, seconds) {
-  let tab = await chrome.tabs.get(tabId).catch(() => null);
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
   if (!tab) {
     // The tab is gone: reopen the page, at the time if it's YouTube.
     if (!url) return false;
     const u = new URL(url);
     if (/youtube\.com$/.test(u.hostname.replace(/^www\.|^m\./, ""))) u.searchParams.set("t", `${Math.floor(seconds)}s`);
-    tab = await chrome.tabs.create({ url: u.toString() });
+    await chrome.tabs.create({ url: u.toString() });
     return true;
   }
   await chrome.tabs.update(tab.id, { active: true });

@@ -27,7 +27,10 @@ function chunk(text, offset = 0) {
 
 function waitForLoad(tabId) {
   return new Promise((resolve) => {
+    let fired = false;
     const done = () => {
+      if (fired) return;
+      fired = true;
       chrome.tabs.onUpdated.removeListener(listener);
       clearTimeout(timer);
       // Give script-rendered pages a moment after "complete".
@@ -36,6 +39,8 @@ function waitForLoad(tabId) {
     const listener = (id, info) => id === tabId && info.status === "complete" && done();
     const timer = setTimeout(done, OPEN_TIMEOUT_MS);
     chrome.tabs.onUpdated.addListener(listener);
+    // It may have finished loading before the listener was added.
+    chrome.tabs.get(tabId).then((t) => t.status === "complete" && listener(tabId, t), () => {});
   });
 }
 
@@ -82,13 +87,17 @@ export function createRunner({ seen, activity, approve }) {
         throw new Error("That isn't a valid URL.");
       }
       if (!/^https?:$/.test(u.protocol)) throw new Error("Only http and https links can be opened.");
-      if (!seen.has(clean(u.href)) && !(await approve(u.href))) {
-        throw new Error("The user didn't allow opening that link.");
+      // A link already seen opens without its #fragment, so nothing new can ride along
+      // in it; anything else opens exactly as you approved it.
+      let target = clean(u.href);
+      if (!seen.has(target)) {
+        if (!(await approve(u.href))) throw new Error("The user didn't allow opening that link.");
+        target = u.href;
       }
-      seen.add(clean(u.href));
+      seen.add(clean(target));
       const a = activity(`Opening ${u.hostname}`);
       const current = await ctx.activeTab();
-      const tab = await chrome.tabs.create({ url: u.href, active: false, windowId: current?.windowId });
+      const tab = await chrome.tabs.create({ url: target, active: false, windowId: current?.windowId });
       try {
         await waitForLoad(tab.id);
         const loaded = await chrome.tabs.get(tab.id);
@@ -107,7 +116,7 @@ export function createRunner({ seen, activity, approve }) {
       const tab = await chrome.tabs.get(tab_id).catch(() => null);
       if (!tab || !/youtube\.com\/watch/.test(tab.url)) throw new Error("That tab isn't a YouTube video.");
       const a = activity("Loading more YouTube comments");
-      const comments = await ctx.youtubeComments(tab.id, Math.min(200, Math.max(1, count | 0)));
+      const { comments } = await ctx.youtubeDetails(tab.id, Math.min(200, Math.max(1, count | 0)));
       a.done(`${comments.length} comments`);
       const text = comments.map((c) => `- ${c.author}${c.likes ? ` (${c.likes} likes)` : ""}: ${c.text}`).join("\n");
       remember(text);

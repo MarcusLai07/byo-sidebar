@@ -10,16 +10,19 @@ if (chrome.sidePanel?.setPanelBehavior) {
 
 // Remember every tab that has played sound this browser session, so paused
 // players stay in the media strip (like Arc) instead of vanishing when they go quiet.
-chrome.tabs.onUpdated.addListener(async (tabId, info) => {
-  if (info.audible !== true) return;
-  const { mediaTabs = [] } = await chrome.storage.session.get("mediaTabs");
-  if (!mediaTabs.includes(tabId)) chrome.storage.session.set({ mediaTabs: [...mediaTabs, tabId] });
-});
+// Updates run one at a time, so two tabs starting to play at once can't drop one.
+let mediaQueue = Promise.resolve();
+const updateMediaTabs = (change) =>
+  (mediaQueue = mediaQueue.then(async () => {
+    const { mediaTabs = [] } = await chrome.storage.session.get("mediaTabs");
+    const next = change(mediaTabs);
+    if (next.length !== mediaTabs.length) await chrome.storage.session.set({ mediaTabs: next });
+  }).catch(() => {}));
 
-chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const { mediaTabs = [] } = await chrome.storage.session.get("mediaTabs");
-  if (mediaTabs.includes(tabId)) chrome.storage.session.set({ mediaTabs: mediaTabs.filter((t) => t !== tabId) });
+chrome.tabs.onUpdated.addListener((tabId, info) => {
+  if (info.audible === true) updateMediaTabs((tabs) => (tabs.includes(tabId) ? tabs : [...tabs, tabId]));
 });
+chrome.tabs.onRemoved.addListener((tabId) => updateMediaTabs((tabs) => tabs.filter((t) => t !== tabId)));
 
 // ---------- right-click menu ----------
 
@@ -51,7 +54,7 @@ function openPanel(windowId) {
 }
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  openPanel(tab.windowId);
+  openPanel(tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT); // no tab in some PDF viewers and frames
   const id = String(info.menuItemId);
   if (id === "ask-selection") hand({ kind: "selection", selection: info.selectionText });
   else if (id === "ask-image") hand({ kind: "image", srcUrl: info.srcUrl });

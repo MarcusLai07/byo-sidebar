@@ -74,7 +74,6 @@ function mediaScript() {
 }
 
 const els = {
-  view: document.getElementById("media-view"),
   count: document.getElementById("media-count"),
   grid: document.getElementById("media-grid"),
   filter: document.querySelector(".media-filter"),
@@ -133,9 +132,6 @@ async function pump() {
   }
 }
 
-export const formatBytes = (b) =>
-  !b ? "" : b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >= 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`;
-
 // Many sites only serve images to their own pages (hotlink protection), which left
 // previews blank. For requests from this panel (not from tabs) to the hosts on the
 // page, send the page as the Referer, the way the page itself would.
@@ -154,7 +150,7 @@ async function sendPageAsReferrer(pageUrl, urls) {
 const shown = () => items.filter((m) => kind === "all" || (kind === "video" ? m.type !== "image" : m.type === "image"));
 
 function fileName(m, i) {
-  const host = (pageTab?.url && new URL(pageTab.url).hostname.replace(/^www\./, "")) || "page";
+  const host = (pageTab?.url && ctx.hostOf(pageTab.url)) || "page";
   let name = "";
   if (!m.url.startsWith("data:")) name = decodeURIComponent(new URL(m.url).pathname.split("/").pop() || "");
   name = name.replace(/[^\w.\-() ]+/g, "_").slice(0, 80);
@@ -165,7 +161,7 @@ function fileName(m, i) {
 }
 
 const label = (m) =>
-  [m.w && m.h ? `${m.w}×${m.h}` : m.duration ? `${Math.round(m.duration)}s` : "", formatBytes(m.bytes)].filter(Boolean).join(" · ");
+  [m.w && m.h ? `${m.w}×${m.h}` : m.duration ? `${Math.round(m.duration)}s` : "", ctx.formatBytes(m.bytes)].filter(Boolean).join(" · ");
 
 function tile(m) {
   const t = document.createElement("button");
@@ -243,7 +239,7 @@ function draw() {
 function updateActions() {
   const n = selected.size;
   const bytes = items.filter((m) => selected.has(m.url)).reduce((sum, m) => sum + (m.bytes || 0), 0);
-  els.download.textContent = n ? `Download ${n}${bytes ? ` · ${formatBytes(bytes)}` : ""}` : "Download";
+  els.download.textContent = n ? `Download ${n}${bytes ? ` · ${ctx.formatBytes(bytes)}` : ""}` : "Download";
   els.download.disabled = !n;
   const imgs = items.filter((m) => selected.has(m.url) && m.type === "image").length;
   els.attach.disabled = !imgs;
@@ -296,7 +292,9 @@ els.refresh.addEventListener("click", () => renderMedia(deps, { keepSelection: t
 
 // Scans the active tab. With keepSelection (refresh), ticked items that are still
 // on the page stay ticked.
+let scan = 0;
 export async function renderMedia(d, { keepSelection = false } = {}) {
+  const run = ++scan; // a newer scan (e.g. switching tabs) wins over this one
   deps = d;
   const previous = new Set(keepSelection ? selected : []);
   selected.clear();
@@ -306,9 +304,13 @@ export async function renderMedia(d, { keepSelection = false } = {}) {
   pageTab = await ctx.activeTab();
   els.count.textContent = "Looking for media…";
   els.grid.replaceChildren();
-  if (!pageTab) return draw();
+  if (!pageTab) {
+    els.refresh.classList.remove("spinning");
+    return draw();
+  }
   try {
     const results = await chrome.scripting.executeScript({ target: { tabId: pageTab.id, allFrames: true }, func: mediaScript });
+    if (run !== scan) return;
     const seen = new Set();
     for (const r of results) {
       if (!r.result) continue;
@@ -316,6 +318,7 @@ export async function renderMedia(d, { keepSelection = false } = {}) {
       for (const m of r.result.items) if (!seen.has(m.url) && seen.add(m.url)) items.push(m);
     }
   } catch {
+    if (run !== scan) return;
     els.count.textContent = "This page can't be read by extensions.";
     els.refresh.classList.remove("spinning");
     return;
@@ -323,6 +326,7 @@ export async function renderMedia(d, { keepSelection = false } = {}) {
   for (const m of items) if (previous.has(m.url)) selected.add(m.url);
   for (const m of items) if (!m.bytes && sizeCache.get(m.url)) m.bytes = sizeCache.get(m.url);
   await sendPageAsReferrer(pageTab.url, items.flatMap((m) => [m.url, m.poster].filter(Boolean)));
+  if (run !== scan) return;
   setTimeout(() => els.refresh.classList.remove("spinning"), 300);
   // Biggest first: the photos you're after, not thumbnails.
   items.sort((a, b) => (b.type === "image") - (a.type === "image") || (b.w * b.h || 0) - (a.w * a.h || 0));

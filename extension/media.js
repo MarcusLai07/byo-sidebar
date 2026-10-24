@@ -134,7 +134,11 @@
     return tabs.filter((t) => t && !dismissed.has(t.id) && /^https?:/.test(t.url || ""));
   }
 
+  // Polls and tab events overlap: only the latest refresh may render, and none while hidden.
+  let refreshSeq = 0;
   async function refresh() {
+    if (document.visibilityState !== "visible") return;
+    const seq = ++refreshSeq;
     const tabs = await candidates();
     const players = await Promise.all(
       tabs.map(async (tab) => {
@@ -145,7 +149,7 @@
         return { tab, frameId: best?.frameId, state: best?.value || { paused: false, hasElement: false } };
       })
     );
-    render(players.filter(Boolean));
+    if (seq === refreshSeq) render(players.filter(Boolean));
   }
 
   async function act(player, action, value) {

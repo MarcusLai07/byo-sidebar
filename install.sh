@@ -12,6 +12,7 @@ set -euo pipefail
 
 REPO="MarcusLai07/lumen"
 DEST="${LUMEN_DIR:-$HOME/Lumen}"
+DIR_SET="${LUMEN_DIR:+1}" # an explicit place wins over "use the clone this runs from"
 VIDEO="ask"
 UNINSTALL=0
 while [[ $# -gt 0 ]]; do
@@ -19,7 +20,7 @@ while [[ $# -gt 0 ]]; do
     --uninstall) UNINSTALL=1 ;;
     --with-video) VIDEO="yes" ;;
     --no-video) VIDEO="no" ;;
-    --dir) DEST="$2"; shift ;;
+    --dir) [[ -n "${2:-}" ]] || { echo "--dir needs a path" >&2; exit 2; }; DEST="$2"; DIR_SET=1; shift ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -49,7 +50,11 @@ say "${bold}${accent}✦ Lumen${reset}${bold}: your own AI in the browser sideba
 # ---------- uninstall ----------
 if [[ $UNINSTALL == 1 ]]; then
   step "Removing Lumen"
-  if [[ -x "$DEST/host/uninstall.sh" ]]; then "$DEST/host/uninstall.sh" | sed 's/^/  /'; fi
+  if [[ -x "$DEST/host/uninstall.sh" ]]; then "$DEST/host/uninstall.sh" | sed 's/^/  /'
+  else # same as host/uninstall.sh, for when the folder is already gone
+    { find "$HOME/Library/Application Support" -maxdepth 4 -path "*NativeMessagingHosts/com.lumen.router.json" -print -delete 2>/dev/null || true; } | sed 's/^/  /'
+    rm -rf "$HOME/Library/Application Support/lumen"
+  fi
   if [[ -d "$DEST" ]] && ask "Delete $DEST too?" n; then rm -rf "$DEST"; done_ "Deleted $DEST"; fi
   say ""
   say "  Last step: remove Lumen from your browser's extensions page."
@@ -74,7 +79,7 @@ done_ "Node.js $(node -v)"
 # Piped through `curl | bash` there's no script file; run from a clone there is.
 SELF_DIR=""
 if [[ -f "${BASH_SOURCE[0]:-}" ]]; then SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; fi
-if [[ -n "$SELF_DIR" && -f "$SELF_DIR/extension/manifest.json" && -z "${LUMEN_DIR:-}" ]]; then
+if [[ -n "$SELF_DIR" && -f "$SELF_DIR/extension/manifest.json" && -z "$DIR_SET" ]]; then
   # Run from a clone: use it where it is.
   DEST="$SELF_DIR"
   step "Using this folder: $DEST"
@@ -87,6 +92,11 @@ elif command -v git >/dev/null && [[ ! -e "$DEST" ]]; then
   git clone --quiet --depth 1 "https://github.com/$REPO.git" "$DEST"
   done_ "Downloaded"
 else
+  # This copy mirrors the download into DEST (deleting what isn't in it): never aim it at someone else's folder.
+  if [[ -e "$DEST" && ! -f "$DEST/extension/manifest.json" && -n "$(ls -A "$DEST" 2>/dev/null)" ]]; then
+    say "  $DEST already exists and isn't a Lumen folder, so it was left alone. Pick an empty or new one with --dir PATH." >&2
+    exit 1
+  fi
   step "Downloading Lumen to $DEST"
   TMP="$(mktemp -d)"
   curl -fsSL "https://codeload.github.com/$REPO/tar.gz/refs/heads/main" | tar -xz -C "$TMP"
@@ -114,9 +124,11 @@ fi
 
 # ---------- router ----------
 step "Setting up the local router"
-"$DEST/host/install.sh" > /tmp/lumen-install.log 2>&1 || { cat /tmp/lumen-install.log; exit 1; }
-grep -E "^✓ " /tmp/lumen-install.log | sed "s/^✓ /  ${ok}✓${reset} Registered with /"
-claude_line="$(grep -E "^  Claude Code:" /tmp/lumen-install.log || true)"
+LOG="$(mktemp -t lumen-install)"
+"$DEST/host/install.sh" > "$LOG" 2>&1 || { cat "$LOG"; exit 1; }
+grep -E "^✓ " "$LOG" | sed "s/^✓ /  ${ok}✓${reset} Registered with /"
+claude_line="$(grep -E "^  Claude Code:" "$LOG" || true)"
+rm -f "$LOG"
 if [[ "$claude_line" == *"not installed"* ]]; then
   say "  ${dim}No Claude Code found: add an API key in Lumen's ⓘ screen, or install Claude Code to use your login.${reset}"
 else

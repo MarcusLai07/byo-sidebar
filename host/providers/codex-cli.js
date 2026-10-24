@@ -53,10 +53,11 @@ module.exports = {
     const input = thread ? req.prompt : `${SYSTEM_PROMPT}\n\n${withTranscript(req)}`;
     const cleanup = () => images.forEach((f) => fs.rm(f, () => {}));
 
-    return runJsonl(BIN, args, { stdin: input }, (ev, { delta, error }) => {
+    const cancel = runJsonl(BIN, args, { stdin: input }, (ev, { delta, error }) => {
       if (ev.type === "thread.started") callbacks.session?.(ev.thread_id);
       if (ev.type === "item.completed" && ev.item?.type === "agent_message") delta(ev.item.text);
       if (ev.type === "turn.failed") error(ev.error?.message || "Codex turn failed.");
     }, { ...callbacks, done: () => (cleanup(), callbacks.done()), error: (m) => (cleanup(), callbacks.error(m)) });
+    return () => (cleanup(), cancel());
   },
 };

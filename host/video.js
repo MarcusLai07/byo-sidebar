@@ -33,9 +33,10 @@ for (const d of [CACHE, WORK, MODELS]) fs.mkdirSync(d, { recursive: true });
 
 // ---------- process helpers ----------
 
-function run(bin, args, { onLine, timeoutMs = 30 * 60 * 1000 } = {}) {
+// `signal` (the chat's) kills the process when the chat is cancelled.
+function run(bin, args, { onLine, signal, timeoutMs = 30 * 60 * 1000 } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, { cwd: WORK, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(bin, args, { cwd: WORK, stdio: ["ignore", "pipe", "pipe"], signal });
     let out = "";
     let err = "";
     const lines = (chunk, sink) => {
@@ -76,8 +77,9 @@ const fmt = (s) => {
 
 // ---------- video info & captions ----------
 
-async function videoInfo(url) {
-  const out = await run(BIN.ytdlp, ["-J", "--skip-download", "--no-playlist", "--no-warnings", "--js-runtimes", "node", url], { timeoutMs: 90000 });
+async function videoInfo(url, signal) {
+  if (!/^https?:\/\//i.test(url)) throw new Error("That isn't an http(s) video URL.");
+  const out = await run(BIN.ytdlp, ["-J", "--skip-download", "--no-playlist", "--no-warnings", "--js-runtimes", "node", "--", url], { timeoutMs: 90000, signal });
   return JSON.parse(out);
 }
 
@@ -97,8 +99,8 @@ function pickCaptions(info) {
   return null;
 }
 
-async function fetchCaptions(pick) {
-  const res = await fetch(pick.url, { headers: { "user-agent": "Mozilla/5.0" } });
+async function fetchCaptions(pick, signal) {
+  const res = await fetch(pick.url, { headers: { "user-agent": "Mozilla/5.0" }, signal });
   if (!res.ok) throw new Error(`Captions download failed (${res.status}).`);
   const data = await res.json();
   return (data.events || [])
@@ -109,15 +111,16 @@ async function fetchCaptions(pick) {
 
 // ---------- local transcription ----------
 
-async function downloadAudio(info, progress) {
+async function downloadAudio(info, progress, signal) {
   const file = path.join(WORK, `${info.id}.wav`);
   if (fs.existsSync(file)) return file;
   progress("Downloading the audio");
   await run(
     BIN.ytdlp,
     ["-f", "bestaudio", "-x", "--audio-format", "wav", "--postprocessor-args", "ffmpeg:-ar 16000 -ac 1",
-     "--no-playlist", "--js-runtimes", "node", "-o", path.join(WORK, `${info.id}.%(ext)s`), info.webpage_url],
+     "--no-playlist", "--js-runtimes", "node", "-o", path.join(WORK, `${info.id}.%(ext)s`), "--", info.webpage_url],
     {
+      signal,
       onLine: (l) => {
         const m = l.match(/\[download\]\s+([\d.]+)%/);
         if (m) progress("Downloading the audio", `${Math.floor(Number(m[1]))}%`);
@@ -127,12 +130,12 @@ async function downloadAudio(info, progress) {
   return file;
 }
 
-async function ensureWhisperModel(progress) {
+async function ensureWhisperModel(progress, signal) {
   const file = path.join(MODELS, WHISPER_MODEL);
   if (fs.existsSync(file)) return file;
   const label = `Downloading the whisper.cpp model (once${WHISPER_MODEL.includes("large-v3-turbo") ? ", about 1.6 GB" : ""})`;
   progress(label);
-  const res = await fetch(WHISPER_MODEL_URL);
+  const res = await fetch(WHISPER_MODEL_URL, { signal });
   if (!res.ok) throw new Error(`Model download failed (${res.status}).`);
   const total = Number(res.headers.get("content-length")) || 0;
   const tmp = `${file}.part`;
@@ -152,19 +155,20 @@ async function ensureWhisperModel(progress) {
   return file;
 }
 
-async function transcribeParakeet(file, progress) {
+async function transcribeParakeet(file, progress, signal) {
   const cached = fs.existsSync(path.join(os.homedir(), ".cache", "huggingface", "hub", "models--mlx-community--parakeet-tdt-0.6b-v3", "snapshots"));
   progress("Transcribing with Parakeet", cached ? undefined : "first run downloads its 2.5 GB model");
-  await run(BIN.parakeet, [file, "--output-format", "json", "--output-dir", WORK]);
+  await run(BIN.parakeet, [file, "--output-format", "json", "--output-dir", WORK], { signal });
   const json = JSON.parse(fs.readFileSync(file.replace(/\.wav$/, ".json"), "utf8"));
   return (json.sentences || []).map((s) => ({ start: s.start, text: String(s.text || "").trim() })).filter((s) => s.text);
 }
 
-async function transcribeWhisper(file, lang, progress) {
-  const model = await ensureWhisperModel(progress);
+async function transcribeWhisper(file, lang, progress, signal) {
+  const model = await ensureWhisperModel(progress, signal);
   progress("Transcribing with whisper.cpp");
   const base = file.replace(/\.wav$/, "");
   await run(BIN.whisper, ["-m", model, "-f", file, "-l", lang || "auto", "-oj", "-of", base, "-pp"], {
+    signal,
     onLine: (l) => {
       const m = l.match(/progress\s*=\s*(\d+)%/);
       if (m) progress("Transcribing with whisper.cpp", `${m[1]}%`);
@@ -191,16 +195,15 @@ function toLines(segments) {
     const text = lines.map((l) => `[${fmt(l.start)}] ${l.parts.join(" ")}`).join("\n");
     if (text.length <= OUTPUT_LIMIT || every === 80) return text.slice(0, OUTPUT_LIMIT);
   }
-  return "";
 }
 
 // ---------- public ----------
 
 // Returns a text block: header + "[m:ss] …" lines, CHUNK characters at a time
-// starting at `offset`. progress(label, note?) shows status.
-async function transcript(url, progress, offset = 0) {
+// starting at `offset`. progress(label, note?) shows status; `signal` cancels.
+async function transcript(url, progress, offset = 0, signal) {
   progress("Looking up the video");
-  const info = await videoInfo(url);
+  const info = await videoInfo(url, signal);
   const cacheFile = path.join(CACHE, `${info.id}.json`);
   let result = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile, "utf8")) : null;
 
@@ -209,7 +212,7 @@ async function transcript(url, progress, offset = 0) {
     const pick = process.env.LUMEN_VIDEO_FORCE_LOCAL ? null : pickCaptions(info);
     if (pick) {
       progress(`Reading YouTube ${pick.kind}`);
-      result = { source: `YouTube ${pick.kind} (${pick.lang})`, segments: await fetchCaptions(pick) };
+      result = { source: `YouTube ${pick.kind} (${pick.lang})`, segments: await fetchCaptions(pick, signal) };
     } else {
       const { parakeet, whisper } = await available();
       const lang = (info.language || "").split("-")[0];
@@ -217,8 +220,8 @@ async function transcript(url, progress, offset = 0) {
       if (!useParakeet && !whisper) {
         throw new Error("This video has no captions, and no local transcriber is installed. Install one: uv tool install parakeet-mlx (English/European) or brew install whisper.cpp (any language), then re-run host/install.sh.");
       }
-      const file = await downloadAudio(info, progress);
-      const segments = useParakeet ? await transcribeParakeet(file, progress) : await transcribeWhisper(file, lang, progress);
+      const file = await downloadAudio(info, progress, signal);
+      const segments = useParakeet ? await transcribeParakeet(file, progress, signal) : await transcribeWhisper(file, lang, progress, signal);
       fs.rm(file, () => {});
       result = { source: useParakeet ? "local transcription (Parakeet)" : "local transcription (whisper.cpp)", segments };
     }
@@ -243,12 +246,12 @@ async function transcript(url, progress, offset = 0) {
 }
 
 // Gemini watches a public YouTube video (sees and hears it) and answers a question.
-async function geminiWatch(url, question, progress) {
+async function geminiWatch(url, question, progress, signal) {
   const key = config.getKey("gemini");
   if (!key) throw new Error("No Gemini API key saved.");
   progress("Gemini is watching the video");
   const api = "https://generativelanguage.googleapis.com/v1beta";
-  const list = await fetch(`${api}/models?pageSize=200&key=${key}`).then((r) => r.json());
+  const list = await fetch(`${api}/models?pageSize=200&key=${key}`, { signal }).then((r) => r.json());
   const model = (list.models || [])
     .filter((m) => m.supportedGenerationMethods?.includes("generateContent") && /^models\/gemini-[\d.]+-flash$/.test(m.name))
     .map((m) => m.name)
@@ -256,6 +259,7 @@ async function geminiWatch(url, question, progress) {
   if (!model) throw new Error("Couldn't find a Gemini Flash model for this key.");
   const res = await fetch(`${api}/${model}:generateContent?key=${key}`, {
     method: "POST",
+    signal,
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       contents: [{ parts: [{ file_data: { file_uri: url } }, { text: `${question}\nGive timestamps as m:ss (or h:mm:ss).` }] }],

@@ -8,21 +8,30 @@ const escape = (s) =>
 
 const TIMESTAMP = /(^|[^\w:/.])((?:(\d{1,2}):)?([0-5]?\d):([0-5]\d))(?![\w:])/g;
 
-function inline(s, opts) {
-  const codes = [];
-  s = s.replace(/`([^`]+)`/g, (_, c) => `\u0000${codes.push(c) - 1}\u0000`);
-  s = escape(s)
+const emphasis = (s) =>
+  s
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, "$1<em>$2</em>")
-    .replace(/(^|[\s(])_([^_\s][^_]*?)_(?=[\s).,!?:;]|$)/g, "$1<em>$2</em>")
-    .replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:|tel:)[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    .replace(/(^|[\s(])_([^_\s][^_]*?)_(?=[\s).,!?:;]|$)/g, "$1<em>$2</em>");
+
+// Code spans and links are set aside first, so the emphasis and timestamp rules can't
+// reach into them (a "1:23" or "*" inside a URL stays part of the URL).
+function inline(s, opts) {
+  const held = [];
+  const hold = (html) => `\u0000${held.push(html) - 1}\u0000`;
+  s = s.replace(/`([^`]+)`/g, (_, c) => hold(`<code>${escape(c)}</code>`));
+  // URLs may contain one level of parentheses, like Wikipedia's Foo_(bar).
+  s = s.replace(/\[([^\]]+)\]\(((?:https?:\/\/|mailto:|tel:)(?:[^\s()]|\([^\s()]*\))+)\)/g, (_, text, url) =>
+    hold(`<a href="${escape(url)}" target="_blank" rel="noopener">${emphasis(escape(text))}</a>`)
+  );
+  s = emphasis(escape(s));
   if (opts.timestamps) {
     s = s.replace(TIMESTAMP, (_, pre, all, h, m, sec) => {
       const t = (Number(h) || 0) * 3600 + Number(m) * 60 + Number(sec);
       return `${pre}<a class="ts" href="#" data-t="${t}" title="Jump to ${all}">${all}</a>`;
     });
   }
-  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${escape(codes[i])}</code>`);
+  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => held[i]);
 }
 
 const isTableRow = (line) => /^\s*\|.*\|\s*$/.test(line);
@@ -46,13 +55,13 @@ export function renderMarkdown(src, opts = {}) {
     }
     list = null;
   };
+  const flush = () => (flushPara(), flushList());
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     if (/^```/.test(line)) {
-      flushPara();
-      flushList();
+      flush();
       const code = [];
       while (++i < lines.length && !lines[i].startsWith("```")) code.push(lines[i]);
       out.push(`<pre><code>${escape(code.join("\n"))}</code></pre>`);
@@ -61,8 +70,7 @@ export function renderMarkdown(src, opts = {}) {
 
     // Table: a header row followed by a |---|---| rule.
     if (isTableRow(line) && i + 1 < lines.length && isTableRule(lines[i + 1])) {
-      flushPara();
-      flushList();
+      flush();
       const head = cells(line);
       const rows = [];
       i += 2;
@@ -76,24 +84,21 @@ export function renderMarkdown(src, opts = {}) {
 
     const heading = line.match(/^(#{1,4})\s+(.*)/);
     if (heading) {
-      flushPara();
-      flushList();
+      flush();
       const level = Math.min(heading[1].length, 3);
       out.push(`<h${level}>${inline(heading[2], opts)}</h${level}>`);
       continue;
     }
 
     if (/^\s*(---|\*\*\*)\s*$/.test(line)) {
-      flushPara();
-      flushList();
+      flush();
       out.push("<hr>");
       continue;
     }
 
     const quote = line.match(/^>\s?(.*)/);
     if (quote) {
-      flushPara();
-      flushList();
+      flush();
       out.push(`<blockquote>${inline(quote[1], opts)}</blockquote>`);
       continue;
     }
@@ -109,15 +114,13 @@ export function renderMarkdown(src, opts = {}) {
     }
 
     if (!line.trim()) {
-      flushPara();
-      flushList();
+      flush();
       continue;
     }
 
     flushList();
     para.push(line);
   }
-  flushPara();
-  flushList();
+  flush();
   return out.join("");
 }

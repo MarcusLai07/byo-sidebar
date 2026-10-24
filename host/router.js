@@ -23,8 +23,14 @@ const log = (...args) => console.error(new Date().toISOString(), ...args);
 log(`router started (pid ${process.pid}, node ${process.version})`);
 process.on("uncaughtException", (e) => {
   log("crash:", e.stack || e);
-  process.exit(1);
+  shutdown(1);
 });
+
+// Every exit goes through here, so no CLI or video tool outlives the router.
+function shutdown(code) {
+  for (const cancel of running.values()) cancel();
+  process.exit(code);
+}
 
 function send(msg, then) {
   const body = Buffer.from(JSON.stringify(msg), "utf8");
@@ -34,16 +40,16 @@ function send(msg, then) {
 }
 
 // Video tools run here; everything else is relayed to the panel. Local tools report
-// progress as activity rows in the reply.
-async function runLocalTool(requestId, name, input) {
+// progress as activity rows in the reply, and stop when `signal` aborts (the chat was cancelled).
+async function runLocalTool(requestId, name, input, signal) {
   const activityId = Math.random().toString(36).slice(2);
   const progress = (label, note) => send({ type: "tool_activity", id: requestId, activityId, label, note, status: "running" });
   try {
-    const content = name === "video_transcript" ? await video.transcript(input.url, progress, input.offset) : await video.geminiWatch(input.url, input.question, progress);
+    const content = name === "video_transcript" ? await video.transcript(input.url, progress, input.offset, signal) : await video.geminiWatch(input.url, input.question, progress, signal);
     send({ type: "tool_activity", id: requestId, activityId, status: "done" });
     return { content, isError: false };
   } catch (e) {
-    send({ type: "tool_activity", id: requestId, activityId, status: "failed", note: e.message.slice(0, 120) });
+    if (!signal?.aborted) send({ type: "tool_activity", id: requestId, activityId, status: "failed", note: e.message.slice(0, 120) });
     return { content: e.message, isError: true };
   }
 }
@@ -55,8 +61,8 @@ async function toolNamesFor() {
 }
 
 // Ask the panel to run a browsing tool; resolves with its result.
-function runTool(requestId, name, input) {
-  if (isLocal(name)) return runLocalTool(requestId, name, input);
+function runTool(requestId, name, input, signal) {
+  if (isLocal(name)) return runLocalTool(requestId, name, input, signal);
   const callId = `${requestId}:${Math.random().toString(36).slice(2)}`;
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
@@ -119,7 +125,7 @@ async function handle(msg) {
     if (!providers.isLogin(msg.provider)) return;
     config.setConnected(msg.provider, !!msg.on);
     log(`${msg.on ? "connected" : "disconnected"} ${msg.provider}`);
-    send({ type: "connected", provider: msg.provider, on: !!msg.on }, () => process.exit(0));
+    send({ type: "connected", provider: msg.provider, on: !!msg.on }, () => shutdown(0));
     return;
   }
 
@@ -127,7 +133,7 @@ async function handle(msg) {
     if (!providers.keyNames().includes(msg.name)) return;
     config.setKey(msg.name, msg.value?.trim());
     // Model lists are cached per process; a key change needs a fresh router.
-    send({ type: "keySaved", name: msg.name }, () => process.exit(0));
+    send({ type: "keySaved", name: msg.name }, () => shutdown(0));
     return;
   }
 
@@ -161,9 +167,13 @@ async function handle(msg) {
       send({ type: "error", id: msg.id, message: `${provider.login.name} isn't connected. Connect it from Keys.` });
       return;
     }
-    const tool = msg.browse ? (name, input) => runTool(msg.id, name, input) : null;
+    // Registered before the await below, so a cancel that arrives meanwhile still lands.
+    const ac = new AbortController();
+    running.set(msg.id, () => ac.abort());
+    const tool = msg.browse ? (name, input) => runTool(msg.id, name, input, ac.signal) : null;
     if (tool) toolRunners.set(msg.id, tool);
     const toolNames = tool ? await toolNamesFor() : null;
+    if (ac.signal.aborted) return;
     const cancel = provider.chat(msg, {
       tool,
       toolNames,
@@ -181,7 +191,8 @@ async function handle(msg) {
         send({ type: "error", id: msg.id, message });
       },
     });
-    running.set(msg.id, cancel);
+    // A provider can finish (or fail) synchronously, which already removed the entry.
+    if (running.has(msg.id)) running.set(msg.id, () => (ac.abort(), cancel()));
   }
 }
 
@@ -198,7 +209,4 @@ process.stdin.on("data", (chunk) => {
 });
 
 // The browser closes stdin when the panel goes away; stop any in-flight replies.
-process.stdin.on("end", () => {
-  for (const cancel of running.values()) cancel();
-  process.exit(0);
-});
+process.stdin.on("end", () => shutdown(0));

@@ -20,6 +20,8 @@ const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 // entrance animation would hold things at opacity 0 until the panel is shown.
 const on = () => !reduced.matches && document.visibilityState === "visible";
 const springy = (bounce = 0.32, duration = 520) => spring({ bounce, duration });
+// Resolves when anim ends, or after ms at the latest: never block the UI on an animation.
+const settled = (anim, ms) => new Promise((resolve) => (anim.then(resolve), setTimeout(resolve, ms)));
 
 // First open: header buttons drop in, then the welcome line types itself in.
 export function intro() {
@@ -155,22 +157,14 @@ export function settle(el, dy) {
 export function leave(targets, { y = 6, scale = 0.96, duration = 170, x = 0 } = {}) {
   const list = targets instanceof Element ? [targets] : [...(targets || [])];
   if (!on() || !list.length) return Promise.resolve();
-  return new Promise((resolve) => {
-    const anim = animate(list, { opacity: 0, translateY: y, translateX: x, scale, duration, ease: "in(2)" });
-    anim.then(resolve);
-    setTimeout(resolve, duration + 120); // never block the UI on an animation
-  });
+  return settled(animate(list, { opacity: 0, translateY: y, translateX: x, scale, duration, ease: "in(2)" }), duration + 120);
 }
 
 // The ⚡ menu folds back up toward its button.
 export function menuOut(menu) {
   if (!on()) return Promise.resolve();
-  return new Promise((resolve) => {
-    animate(menu.querySelectorAll(".menu-heading, .menu-tabs, .menu-note, .item"), { opacity: 0, translateX: -6, duration: 120, delay: stagger(8, { from: "last" }), ease: "in(2)" });
-    const anim = animate(menu, { opacity: 0, scaleY: 0.9, scaleX: 0.97, translateY: -4, duration: 190, delay: 40, ease: "in(3)" });
-    anim.then(resolve);
-    setTimeout(resolve, 360);
-  });
+  animate(menu.querySelectorAll(".menu-heading, .menu-tabs, .menu-note, .item"), { opacity: 0, translateX: -6, duration: 120, delay: stagger(8, { from: "last" }), ease: "in(2)" });
+  return settled(animate(menu, { opacity: 0, scaleY: 0.9, scaleX: 0.97, translateY: -4, duration: 190, delay: 40, ease: "in(3)" }), 360);
 }
 
 // Accordion body opening: height grows from 0 with a soft spring, content fades up.
@@ -178,32 +172,23 @@ export function expand(body) {
   if (!on()) return Promise.resolve();
   const h = body.scrollHeight;
   body.style.overflow = "hidden";
-  return new Promise((resolve) => {
-    const done = () => {
-      body.style.removeProperty("height");
-      body.style.removeProperty("overflow");
-      resolve();
-    };
-    animate(body, { height: [0, h], ease: springy(0.18, 480) }).then(done);
-    animate(body.children, { opacity: [0, 1], translateY: [-6, 0], delay: stagger(30, { start: 60 }), duration: 320, ease: "out(3)" });
-    setTimeout(done, 900);
-  });
+  animate(body.children, { opacity: [0, 1], translateY: [-6, 0], delay: stagger(30, { start: 60 }), duration: 320, ease: "out(3)" });
+  return settled(animate(body, { height: [0, h], ease: springy(0.18, 480) }), 900).then(() => unclip(body));
 }
+
+const unclip = (body) => {
+  body.style.removeProperty("height");
+  body.style.removeProperty("overflow");
+};
 
 // Accordion body closing: content fades, then height folds to 0.
 export function collapse(body) {
   if (!on()) return Promise.resolve();
   body.style.overflow = "hidden";
-  return new Promise((resolve) => {
-    const done = () => {
-      body.style.removeProperty("height");
-      body.style.removeProperty("overflow");
-      [...body.children].forEach(reset);
-      resolve();
-    };
-    animate(body.children, { opacity: 0, duration: 120, ease: "in(2)" });
-    animate(body, { height: [body.offsetHeight, 0], duration: 260, ease: "inOut(3)" }).then(done);
-    setTimeout(done, 600);
+  animate(body.children, { opacity: 0, duration: 120, ease: "in(2)" });
+  return settled(animate(body, { height: [body.offsetHeight, 0], duration: 260, ease: "inOut(3)" }), 600).then(() => {
+    unclip(body);
+    [...body.children].forEach(reset);
   });
 }
 
@@ -214,4 +199,4 @@ export function reset(el) {
 }
 
 // For the classic media-strip script, which can't import modules.
-window.lumenMotion = { popIn, tilesIn, cascade, leave, reset };
+window.lumenMotion = { popIn, leave };
