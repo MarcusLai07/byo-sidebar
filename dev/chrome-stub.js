@@ -55,7 +55,12 @@
         if (msg.type === "hello") {
           send({
             type: "hello",
-            providers: [
+            providers: DEMO ? [
+              { id: "claude-cli", label: "Claude Code login", models: [{ id: "opus", label: "Claude Opus" }, { id: "sonnet", label: "Claude Sonnet" }, { id: "haiku", label: "Claude Haiku" }] },
+              { id: "codex-cli", label: "Codex (ChatGPT login)", models: [{ id: "gpt", label: "GPT-5" }] },
+              { id: "gemini-api", label: "Gemini (API key)", models: [{ id: "gemini-pro", label: "Gemini 2.5 Pro" }, { id: "gemini-flash", label: "Gemini 2.5 Flash" }] },
+              { id: "deepseek-api", label: "DeepSeek (API key)", models: [{ id: "deepseek-chat", label: "DeepSeek V3" }] },
+            ] : [
               { id: "claude-cli", label: "Claude (Claude Code login)", models: [{ id: "opus", label: "Claude Opus" }, { id: "haiku", label: "Claude Haiku" }] },
               { id: "anthropic-api", label: "Claude (API key)", models: [{ id: "claude-x", label: "Claude X" }] },
             ],
@@ -99,6 +104,20 @@
   }
 
   window.__downloadItems = [{ id: 7, state: "complete", filename: "/Users/me/Downloads/logo.png", finalUrl: `${location.origin}/extension/icons/icon-128.png`, mime: "image/png", fileSize: 4200, startTime: new Date().toISOString(), exists: true }];
+  // ?harness&demo: two "playing" tabs so the media strip shows up in recordings.
+  const DEMO = location.search.includes("demo");
+  const art = (a, b) =>
+    "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="64" height="64" fill="url(#g)"/></svg>`);
+  const DEMO_PLAYERS = {
+    1: { title: "MARTIN GARRIX B2B ALESSO LIVE @ ULTRA 2026", artist: "Martin Garrix", artwork: art("#ff7a45", "#7c3aed"), currentTime: 1532, duration: 4445 },
+    2: { title: "Die For You x Is There Someone Else", artist: "AM808", artwork: art("#f43f5e", "#f59e0b"), currentTime: 353, duration: 436 },
+  };
+  if (DEMO) {
+    tabs[0].audible = true;
+    tabs[1].audible = true;
+    tabs[1].title = "Die For You x Is There Someone Else – YouTube";
+    tabs[1].url = "https://www.youtube.com/watch?v=demo2";
+  }
   const session = store("session");
   window.chrome = {
     runtime: {
@@ -112,7 +131,7 @@
     tabs: {
       query: async (q) => {
         if (q.url) return [];
-        if (q.audible) return [];
+        if (q.audible) return DEMO ? tabs.filter((t) => t.audible) : [];
         if (q.groupId != null) return tabs.filter((t) => t.groupId === q.groupId);
         if (q.active) return tabs.filter((t) => t.active);
         return tabs;
@@ -165,6 +184,11 @@
           if (target.tabId === 50) return Promise.resolve([{ frameId: 0, result: { selection: "", text: "1001Tracklists: 0:11 Voodoo; 3:55 Under Control", duration: null } }]);
           const text = target.tabId === 1 ? "Martin Garrix B2B Alesso live at Ultra. Comments: 0:11 Voodoo, 3:55 Under Control" : "Release notes: version 2 ships Friday.";
           return Promise.resolve([{ frameId: 0, result: { selection: window.__selection || "", text, duration: target.tabId === 1 ? 4445 : null } }]);
+        }
+        if (DEMO && func.name === "probe" && DEMO_PLAYERS[target.tabId]) {
+          const p = DEMO_PLAYERS[target.tabId];
+          if (target.tabId === 1) p.currentTime += 1;
+          return Promise.resolve([{ frameId: 0, result: { hasElement: true, paused: target.tabId === 2, canNext: true, canPrev: true, score: 3, ...p } }]);
         }
         if (func.name === "mediaScript") {
           const icon = `${location.origin}/extension/icons/icon-128.png`;

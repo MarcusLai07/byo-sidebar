@@ -1,86 +1,143 @@
-# Lumen
+<div align="center">
 
-*Formerly BYO Sidebar.* Bring your own AI to your browser's sidebar. A Chromium extension (built for people who are done with Dia's built-in chat, but works in Chrome, Arc, Brave and Edge too) that gives you a chat panel where **you** pick the model, and signs in with an API key **or your existing login**.
+# ✦ Lumen
 
-- **Chat about your tabs:** the current page and highlighted text go along automatically (click the tab chip to leave it out). Type `@` to add other tabs or a whole tab group. PDFs open in a tab are sent as PDFs.
-- **Skills:** pick one from the ⚡ menu next to the model (click runs it, ✎ lets you add details first), or type `/`. Saved prompts (Summarize, Explain, Copy edit, Reply, Translate, Compare tabs, Action items, Timestamps, ELI5, Fact check), or write your own with `{tab}`, `{selection}`, `{tabs}` and `{input}` placeholders. In ⓘ → Skills, drag ⋮⋮ to reorder (the menus follow), and edit or delete any skill: built-ins keep a Reset, and deleted built-ins can be restored.
-- **Attachments:** upload or paste images, PDFs and text files, screenshot the tab, or attach a recent download.
-- **Save media:** ⚡ → Actions → *Save images & videos* shows every image (at its largest size), video and audio file the page uses, biggest first, with dimensions and file size (the Download button shows the total). Select and download them to `Downloads/Lumen/<site>/`, or attach images to the chat. Streamed video (YouTube and most video sites) has no file to save, so it isn't offered.
-- **Clickable timestamps:** times in answers (`3:55`, `1:02:03`) jump the video or audio in the tab you asked about, like YouTube comment timestamps.
-- **Saved chats:** every chat is kept locally and searchable. Edit a question or regenerate an answer, and switch models mid-chat.
-- **Read-only browsing:** when it needs more to answer, the chat can list and read your tabs, open links in a background tab (closed afterwards) and load more YouTube comments. It never clicks, types or submits. Links that haven't appeared in the chat or in pages it read ask you first, so a page can't trick it into sending your data somewhere. Works with Claude Code and API-key models; turn it off in ⓘ → Models & keys.
-- **Right-click and address bar:** select text → right-click → Lumen to explain, translate or copy-edit it, or ask about an image. Type `ai` + space in the address bar to ask from there.
-- **Voice input** where the browser supports speech recognition.
-- **Media strip:** an Arc-style mini player for every tab with audio or video (play/pause, next/previous or ±10s, seek, mute, jump to tab), in two columns when there's more than one. Minimize it to small tabs and click one to open just that player; ✕ pauses and hides a player. Next/previous use the site's own buttons on YouTube, YouTube Music, Spotify and SoundCloud.
-- **No API key needed for Claude:** it can use your signed-in [Claude Code](https://claude.com/claude-code) CLI, with all tools disabled.
-- **Extensions manager:** the puzzle button lists every extension installed in the browser, with on/off switches, options, details and remove (always through the browser's own confirmation).
-- **Instant actions, no AI, no tokens** (⚡ menu → *Instant* tab): Lumen works these out itself on your machine:
-  - *Detect tech stack*: frameworks, libraries, CMS, analytics, ads, hosting/CDN, payments… from about 100 of Lumen's own fingerprints (MIT), each linked to its homepage.
-  - *Video timestamps*: the chapter list or tracklist from the description or top comments, with clickable times (YouTube).
-  - *Video transcript*: captions via the router's yt-dlp, or a local transcription (YouTube).
-  - *Page outline* (headings that jump to their spot), *Links on this page*, *Contacts on this page* (emails, phones, social profiles), *Page info* (reading time, dates, language).
-  Follow-up questions can see these answers; only the follow-up uses tokens. The *AI skills* tab is separate and marked as using tokens; *Tools* holds attach and save.
-- **Glass design and motion:** rounded, translucent glass surfaces over a slowly drifting glow, in light and dark, with springy entrances and matching exits by [anime.js](https://animejs.com) (v4.5, MIT, bundled in `extension/vendor/`). Motion turns off when your system asks for reduced motion.
-- Everything runs on your machine; questions go only to the model provider you pick.
+**Your own AI in the browser sidebar.** Pick the model, sign in with the login you already have.
 
-**Timestamps for any YouTube video**, even without chapters or timestamped comments. When the page has none, the chat fetches a timestamped transcript through the local router:
-1. YouTube's own captions via [yt-dlp](https://github.com/yt-dlp/yt-dlp), usually in about 10 seconds;
-2. otherwise it downloads the audio and transcribes it on your Mac with [Parakeet](https://github.com/senstella/parakeet-mlx) (English and European languages, about a minute per hour of audio) or [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (any language, a few minutes per hour);
-3. with a Gemini API key it can also have Gemini watch the video, which hears music too and helps with DJ sets.
+Built to replace Dia's chat · works in Chrome, Arc, Brave and Edge · macOS
 
-Transcripts are cached in `~/Library/Caches/lumen/transcripts`. To enable it:
+<img src="docs/media/demo.gif" width="380" alt="Lumen: asking about a YouTube set, the ⚡ menu, the model picker and the extensions manager">
+
+<sub>[▶ Watch in full quality (MP4)](docs/media/demo.mp4)</sub>
+
+</div>
+
+## Install in one line
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MarcusLai07/lumen/main/install.sh | bash
+```
+
+It downloads Lumen to `~/Lumen`, sets up the small local router, copies the extension's folder path to your clipboard and opens your browser's extensions page. Then:
+
+1. Turn on **Developer mode** (top right).
+2. Click **Load unpacked** → press **⌘⇧G** → **⌘V** → Return → **Select**.
+3. Pin Lumen from the 🧩 menu and click it.
+
+That's it. **Update:** run the same line again, then click ↻ on Lumen in the extensions page.
+
+<details>
+<summary><b>Options, uninstall, and what it installs</b></summary>
+
+<br>
+
+| | |
+|---|---|
+| Needs | macOS, Node.js 18+ (the installer offers `brew install node` if it's missing) |
+| Video tools | asks before installing `yt-dlp` + `ffmpeg` (≈0.5 GB). Skip the question with `--with-video` or `--no-video` |
+| Somewhere else | `--dir ~/Apps/Lumen` |
+| Uninstall | `curl -fsSL …/install.sh \| bash -s -- --uninstall` then remove Lumen from the extensions page |
+| From a clone | `git clone https://github.com/MarcusLai07/lumen && ./lumen/install.sh` |
+
+Flags go after `bash -s --` when piped, e.g. `… | bash -s -- --with-video`.
+
+The router is copied to `~/Library/Application Support/lumen/` (macOS won't let a browser start programs inside `~/Documents`), and registered with Dia, Chrome, Arc, Brave, Edge and Chromium. API keys live in `~/.config/lumen/config.json`, readable only by you. Logs: `~/Library/Logs/lumen/host.log`.
+
+**Why the manual click?** Browsers only let you add an extension outside their store through *Load unpacked*. No script is allowed to do it for you.
+
+</details>
+
+## Connect a model
+
+Open Lumen's **ⓘ** screen. Use a login you already have, or paste an API key.
+
+| | Use your login (no key) | Or an API key |
+|---|---|---|
+| **Claude** | [Claude Code](https://claude.com/claude-code): run `claude` once to sign in | Anthropic |
+| **OpenAI** | [Codex CLI](https://github.com/openai/codex): `npm i -g @openai/codex && codex login` | OpenAI |
+| **Gemini** | [Gemini CLI](https://github.com/google-gemini/gemini-cli): `npm i -g @google/gemini-cli`, run `gemini` | Gemini |
+| **DeepSeek** | – | DeepSeek |
+
+Installed a CLI after Lumen? Run the install line again so the router finds it.
+
+## What it does
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/media/chat.png" alt="A reply with clickable video timestamps">
+<b>Chat about your tabs.</b> The page you're on and any highlighted text go along. Type <code>@</code> for other tabs. Times like <code>3:55</code> in answers jump the video.
+</td>
+<td width="50%" valign="top">
+<img src="docs/media/menu.png" alt="The Instant tab of the ⚡ menu">
+<b>Instant actions, zero tokens.</b> Tech stack, video timestamps and transcripts, page outline, links, contacts, page info: worked out on your Mac, no AI.
+</td>
+</tr>
+<tr>
+<td valign="top">
+<img src="docs/media/models.png" alt="The model picker">
+<b>Any model, mid-chat.</b> Claude, GPT, Gemini, DeepSeek. Switch whenever; the chat carries over.
+</td>
+<td valign="top">
+<img src="docs/media/skills.png" alt="The AI skills tab">
+<b>Skills.</b> Summarize, Explain, Translate, Compare tabs… or write your own. Type <code>/</code>, drag to reorder, edit or delete any of them.
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>Everything else</b></summary>
+
+<br>
+
+- **Media strip:** a mini player for every tab playing audio or video: play, skip, seek, mute, jump to it.
+- **Save images & videos** from a page at full size, into `Downloads/Lumen/<site>/`.
+- **Extensions manager** (🧩): every extension with on/off switches, options and remove.
+- **Attachments:** images, PDFs, text, a screenshot of the tab, or a recent download.
+- **Read-only browsing:** when it needs more, the AI can read your tabs and open links in the background. It never clicks or types, and asks before visiting links that came from nowhere.
+- **Saved chats:** searchable history; edit a question or regenerate an answer.
+- **Right-click → Lumen** on text or images, and `ai` + space in the address bar.
+- **Voice input**, light and dark glass themes, and motion that turns off with *Reduce motion*.
+
+</details>
+
+<details>
+<summary><b>Timestamps for any YouTube video</b></summary>
+
+<br>
+
+No chapters and no timestamped comments? Lumen gets a transcript through the router, cached in `~/Library/Caches/lumen/transcripts`:
+
+1. YouTube's captions via [yt-dlp](https://github.com/yt-dlp/yt-dlp), in about 10 seconds;
+2. otherwise it transcribes the audio on your Mac with [Parakeet](https://github.com/senstella/parakeet-mlx) or [whisper.cpp](https://github.com/ggml-org/whisper.cpp);
+3. with a Gemini key, Gemini can watch the video (it hears music, handy for DJ sets).
 
 ```bash
 brew install yt-dlp ffmpeg whisper.cpp
 uv tool install parakeet-mlx   # optional, faster for English and European audio
-./host/install.sh
 ```
 
-The first local transcription downloads a model: about 1.6 GB for whisper.cpp (set `LUMEN_WHISPER_MODEL=ggml-small.bin` before `install.sh` for a smaller one), or 2.5 GB for Parakeet.
+The first local transcription downloads a model (1.6 GB whisper, 2.5 GB Parakeet; set `LUMEN_WHISPER_MODEL=ggml-small.bin` before installing for a smaller one).
 
-On YouTube the sidebar reads the full description and the top ~40 comments (untruncated) straight from YouTube's data, so nothing needs expanding or scrolling. For the spoken words too, open **Show transcript** under the video: YouTube blocks extensions from fetching captions directly. On other sites, text folded behind "read more" or closed sections is included as well.
+</details>
 
-> Not affiliated with The Browser Company or Dia. Browsers don't let extensions replace their built-in UI, so this runs in the extension side panel (or a docked window where side panels aren't supported).
+<details>
+<summary><b>Dia: open Lumen with ⌘E</b></summary>
 
-## Providers
+<br>
 
-| Provider | Login mode (no key) | API key mode |
-|---|---|---|
-| Claude | [Claude Code](https://claude.com/claude-code): sign in by running `claude` | Anthropic key |
-| OpenAI | [Codex CLI](https://github.com/openai/codex): `npm i -g @openai/codex`, then `codex login` with your ChatGPT account | OpenAI key |
-| Gemini | [Gemini CLI](https://github.com/google-gemini/gemini-cli): `npm i -g @google/gemini-cli`, then run `gemini` and sign in with Google | Gemini key |
-| DeepSeek | n/a (no official CLI) | DeepSeek key |
+In Dia → Settings → Shortcuts, move **Chat…** (⌘E) and **New Chat** (⇧⌘E) to other keys. Then set ⌘E for Lumen in `dia://extensions/shortcuts`.
 
-Add API keys from the panel's **ⓘ → Models & keys** section. They're saved to `~/.config/lumen/config.json` (readable only by you) and never stored in the extension. Model lists for API providers come live from each provider, so new models show up on their own.
+</details>
 
-Login mode notes:
-- Every CLI runs in an empty folder with tools off or read-only, and without your CLI config, so it only chats.
-- Codex returns each reply in one piece rather than streaming it.
-- Re-run `./host/install.sh` after installing a new CLI so the router can find it.
+## Privacy
 
-## Install (macOS)
+Everything runs on your machine. Your questions go only to the provider you pick. Chats are stored in the browser, keys in a file only you can read, and the router only answers Lumen's own extension ID.
 
-Requires Node.js 18+. Set up at least one login CLI or API key from the table above.
+<details>
+<summary><b>How it works (for developers)</b></summary>
 
-1. Register the local router with your browsers:
-
-   ```bash
-   ./host/install.sh
-   ```
-
-2. Open `dia://extensions` (or `chrome://extensions`), turn on **Developer mode**, click **Load unpacked**, and pick the `extension/` folder.
-3. Click the extension's toolbar icon, or set a shortcut in `dia://extensions/shortcuts`.
-
-   **Dia users:** to have ⌘E open this instead of Dia's chat, first move Dia's own shortcuts in Dia → Settings → Shortcuts. Change **Chat…** (⌘E) and **New Chat** (⇧⌘E) to something else, then give Lumen ⌘E.
-
-Test the router without the browser: `node host/test-host.js "hello" claude-cli haiku` (any provider id and model; it also checks that a follow-up remembers the first message).
-Remove it with `./host/uninstall.sh`.
-
-Upgrading from BYO Sidebar: just re-run `./host/install.sh`. It moves your keys, caches and models to the new `lumen` folders and removes the old router registration. Saved chats carry over automatically.
-
-The installer copies the router to `~/Library/Application Support/lumen/host`, because macOS stops browsers from launching programs inside `~/Documents`, `~/Desktop` or `~/Downloads`. Re-run it after pulling updates. If the panel says it can't reach the router, check `~/Library/Logs/lumen/host.log`.
-
-## How it works
+<br>
 
 ```
 Side panel (extension/)  ──native messaging──▶  host/router.js  ──▶  providers/*.js
@@ -89,18 +146,21 @@ Side panel (extension/)  ──native messaging──▶  host/router.js  ──
                                                                     └─ openai-compatible: OpenAI, Gemini, DeepSeek
 ```
 
-The panel (`extension/panel/`) owns the conversation and saves chats in IndexedDB. API providers get the history with every request; CLI providers resume their own session, or get the conversation replayed as text after an edit, a regenerate or a model switch.
+- The panel (`extension/panel/`) owns the conversation and keeps chats in IndexedDB. API providers get the history with each request; CLI providers resume their own session.
+- CLIs run in an empty folder with tools off, so they only chat. Browsing tools (`host/providers/tools.js`) run in the panel; Claude Code reaches them through a small MCP server over a Unix socket.
+- The media strip (`extension/media.js`) needs no router. Add a site's skip buttons to `ADAPTERS`.
+- New provider: add a file in `host/providers/` and register it in `host/providers/index.js`.
 
-Browsing tools are defined in `host/providers/tools.js` and run in the panel (`extension/panel/tools.js`). API providers call them through their native tool-use APIs. Claude Code gets them from a small MCP server (`host/providers/mcp-browse.js`) that relays calls to the router over a Unix socket. `video_transcript` and `gemini_watch` run in the router itself (`host/video.js`) and are only offered when yt-dlp or a Gemini key is available. Codex and Gemini CLI logins don't browse yet.
+Dev tools:
 
-The media strip (`extension/media.js`) needs no router: it reads and drives `<video>`/`<audio>` elements and the page's Media Session info directly. To support another site's skip buttons, add its selectors to `ADAPTERS`.
+```bash
+node dev/serve.js                                   # the panel at /extension/sidepanel.html?harness, with fake APIs
+node host/test-host.js "hello" claude-cli haiku     # the router, without a browser
+CHROME=/path/to/chrome-headless-shell node dev/capture.mjs   # re-record the screenshots and demo
+```
 
-For development, `node dev/serve.js` serves:
-- `/extension/sidepanel.html?harness`: the real panel with stubbed extension APIs and a fake router (`dev/chrome-stub.js`)
-- `/dev/media-harness.html`: the media strip against a test tone
+Upgrading from BYO Sidebar? Run the installer: it moves your keys and caches, and saved chats carry over.
 
-The extension has a fixed ID (from the `key` in `manifest.json`) so the router only accepts messages from it. To add a provider, drop a file in `host/providers/` and register it in `host/providers/index.js`.
+</details>
 
-## License
-
-MIT
+<sub>Not affiliated with The Browser Company or Dia. MIT licensed. Motion by [anime.js](https://animejs.com) (MIT).</sub>

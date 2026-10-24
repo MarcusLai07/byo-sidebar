@@ -3,6 +3,6 @@ set -euo pipefail
 
 HOST_NAME="com.lumen.router"
 
-find "$HOME/Library/Application Support" -maxdepth 4 -path "*NativeMessagingHosts/$HOST_NAME.json" -print -delete
+find "$HOME/Library/Application Support" -maxdepth 4 -path "*NativeMessagingHosts/$HOST_NAME.json" -print -delete 2>/dev/null || true
 rm -rf "$HOME/Library/Application Support/lumen"
 echo "Removed. Your API keys in ~/.config/lumen were kept; delete that folder too to remove them."
