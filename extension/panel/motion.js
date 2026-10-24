@@ -66,7 +66,7 @@ export function tilesIn(nodes) {
 export function menuIn(menu) {
   if (!on()) return;
   animate(menu, { scaleY: [0.85, 1], scaleX: [0.96, 1], opacity: [0, 1], duration: 380, ease: springy(0.28, 420) });
-  animate(menu.querySelectorAll(".menu-heading, .item"), {
+  animate(menu.querySelectorAll(".menu-heading, .menu-tabs, .menu-note, .item"), {
     opacity: [0, 1],
     translateX: [-10, 0],
     delay: stagger(22, { start: 60 }),
@@ -127,6 +127,22 @@ export function busy(el, isBusy) {
   }
 }
 
+// Tab highlight gliding to the selected tab.
+export function slidePill(pill, left, width, instant) {
+  if (instant || !on()) {
+    pill.style.left = `${left}px`;
+    pill.style.width = `${width}px`;
+    return;
+  }
+  animate(pill, { left, width, ease: springy(0.25, 420) });
+}
+
+// Tab content: items slide in from the side you switched toward.
+export function paneIn(nodes, dir) {
+  if (!on()) return;
+  animate([...nodes], { opacity: [0, 1], translateX: [dir > 0 ? 14 : -14, 0], delay: stagger(18), duration: 280, ease: "out(3)" });
+}
+
 // ---------- exits: the reverse of each entrance, quick and eased out ----------
 
 // Animate something away; resolves when it's gone (immediately if motion is off).
@@ -144,7 +160,7 @@ export function leave(targets, { y = 6, scale = 0.96, duration = 170, x = 0 } = 
 export function menuOut(menu) {
   if (!on()) return Promise.resolve();
   return new Promise((resolve) => {
-    animate(menu.querySelectorAll(".menu-heading, .item"), { opacity: 0, translateX: -6, duration: 120, delay: stagger(8, { from: "last" }), ease: "in(2)" });
+    animate(menu.querySelectorAll(".menu-heading, .menu-tabs, .menu-note, .item"), { opacity: 0, translateX: -6, duration: 120, delay: stagger(8, { from: "last" }), ease: "in(2)" });
     const anim = animate(menu, { opacity: 0, scaleY: 0.9, scaleX: 0.97, translateY: -4, duration: 190, delay: 40, ease: "in(3)" });
     anim.then(resolve);
     setTimeout(resolve, 360);

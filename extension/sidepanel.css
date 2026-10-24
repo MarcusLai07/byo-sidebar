@@ -1129,3 +1129,46 @@ button:hover .ne { transform: translate(2px, -2px); }
 @media (prefers-reduced-motion: reduce) {
   .chev, .ne, .dropdown .item.action strong::before, #send, .history-item .open { transition: none !important; }
 }
+
+/* ⚡ menu tabs */
+.menu-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  margin: 2px 2px 4px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.menu-tab-pill {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: 0;
+  background: var(--hover);
+  border: 1px solid var(--glass-edge, var(--border));
+  border-radius: 999px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15);
+}
+
+.menu-tab {
+  position: relative;
+  z-index: 1;
+  padding: 5px 4px;
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.menu-tab:hover { color: var(--fg); }
+.menu-tab[aria-selected="true"] { color: var(--fg); }
+.menu-note { margin: 2px 10px 4px; color: var(--muted); font-size: 10.5px; }
+.menu-pane { min-height: 120px; }

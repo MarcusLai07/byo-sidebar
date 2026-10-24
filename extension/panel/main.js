@@ -538,11 +538,6 @@ async function openSkillsMenu() {
     localStorage.setItem("infoOpen", JSON.stringify([...new Set([...JSON.parse(localStorage.getItem("infoOpen") || "[]"), "skills"])]));
     if (state.view !== "info") showView("info");
   });
-  const heading = (text, note) => {
-    const h = Object.assign(document.createElement("div"), { className: "menu-heading", textContent: text });
-    if (note) h.append(Object.assign(document.createElement("span"), { className: "tag", textContent: note }));
-    return h;
-  };
   // Things the sidebar does (not prompts), kept apart from the skills.
   const action = (name, sub, run) => {
     const b = document.createElement("button");
@@ -570,15 +565,49 @@ async function openSkillsMenu() {
     action("Screenshot this tab", "Attach what's visible right now", async () => addAttachment(await ctx.screenshot())),
     action("Upload a file", "Images, PDFs or text", () => els.fileInput.click()),
   ];
-  els.skillsMenu.replaceChildren(
-    heading("Instant", "no tokens"),
-    ...instant,
-    heading("Tools"),
-    ...tools,
-    heading("AI skills", "uses tokens"),
-    ...list.map(item),
-    manage
-  );
+  // Tabs instead of stacked sections, so each group fits without scrolling.
+  const groups = [
+    { id: "instant", label: "Instant", note: "No tokens: Lumen does these itself", items: instant },
+    { id: "tools", label: "Tools", note: "Attach or save things", items: tools },
+    { id: "ai", label: "AI skills", note: "Uses tokens: sent to your model", items: [...list.map(item), manage] },
+  ];
+  let current = groups.find((g) => g.id === localStorage.getItem("menuTab")) || groups[0];
+  const bar = document.createElement("div");
+  bar.className = "menu-tabs";
+  bar.setAttribute("role", "tablist");
+  const pill = Object.assign(document.createElement("span"), { className: "menu-tab-pill" });
+  const note = Object.assign(document.createElement("div"), { className: "menu-note" });
+  const pane = Object.assign(document.createElement("div"), { className: "menu-pane" });
+  const tabs = groups.map((g) => {
+    const t = Object.assign(document.createElement("button"), { type: "button", className: "menu-tab", textContent: g.label });
+    t.setAttribute("role", "tab");
+    t.addEventListener("click", (e) => {
+      e.stopPropagation();
+      show(g);
+    });
+    return t;
+  });
+  bar.append(pill, ...tabs);
+  const show = (g, first = false) => {
+    const dir = groups.indexOf(g) - groups.indexOf(current);
+    current = g;
+    localStorage.setItem("menuTab", g.id);
+    tabs.forEach((t, i) => t.setAttribute("aria-selected", String(groups[i] === g)));
+    note.textContent = g.note;
+    pane.replaceChildren(...g.items);
+    const t = tabs[groups.indexOf(g)];
+    motion.slidePill(pill, t.offsetLeft, t.offsetWidth, first);
+    if (!first) motion.paneIn(pane.children, dir);
+  };
+  els.skillsMenu.replaceChildren(bar, note, pane);
+  show(current, true);
+  // Left/right arrows switch tabs while the menu is open.
+  els.skillsMenu.onkeydown = (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const i = (groups.indexOf(current) + (e.key === "ArrowRight" ? 1 : -1) + groups.length) % groups.length;
+    show(groups[i]);
+  };
   const r = els.skillsBtn.getBoundingClientRect();
   els.skillsMenu.style.top = `${r.bottom + 8}px`;
   els.skillsMenu.style.left = `${Math.max(8, r.left - 6)}px`;
