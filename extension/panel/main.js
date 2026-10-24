@@ -13,6 +13,7 @@ import { renderHistory } from "./history.js";
 import { renderMedia } from "./saver.js";
 import { renderExtensions } from "./extensions.js";
 import * as motion from "./motion.js";
+import { captureScreen } from "./capture.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -131,7 +132,10 @@ function showView(view) {
   }
   if (state.view === "extensions") {
     let first = true;
-    renderExtensions({ changed: (list) => first && ((first = false), motion.cascade(list.children, { gap: 22 })) });
+    renderExtensions({
+      changed: (list) => first && ((first = false), motion.cascade(list.children, { gap: 22 })),
+      capture: (ext) => startCapture({ label: `${ext.name}`, hint: `Now open ${ext.name}'s popup from the toolbar. Lumen captures when the count hits zero.` }),
+    });
   }
   if (state.view === "media") {
     // "done" returns to the chat with the images attached
@@ -306,6 +310,46 @@ els.messages.addEventListener("click", async (e) => {
   if (!ok) toast("No video or audio found in that tab.");
 });
 
+// ---------- screen capture ----------
+
+let captureAbort = null;
+document.getElementById("cd-cancel").addEventListener("click", () => captureAbort?.abort());
+
+// Pick a screen, count down while the user opens what they want (popups close on any
+// click, so they open it after picking), then attach one frame to the next message.
+async function startCapture({ label = "Screen capture", hint = "Get what you want to capture on screen. Lumen captures when the count hits zero." } = {}) {
+  const overlay = document.getElementById("countdown");
+  const num = overlay.querySelector(".cd-num");
+  const arc = overlay.querySelector(".cd-arc");
+  const seconds = 4;
+  captureAbort = new AbortController();
+  try {
+    const image = await captureScreen({
+      seconds,
+      label,
+      signal: captureAbort.signal,
+      onTick: (left) => {
+        if (left === seconds) {
+          overlay.querySelector(".cd-text").textContent = hint;
+          arc.style.strokeDashoffset = "0";
+          overlay.hidden = false;
+          motion.viewIn(overlay);
+        }
+        if (left === 0) overlay.hidden = true;
+        else motion.countdownTick(num, arc, left, seconds);
+      },
+    });
+    if (state.view) showView(state.view); // back to the chat
+    addAttachment(image);
+    toast("Captured. Ask about it below.");
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    overlay.hidden = true;
+    captureAbort = null;
+  }
+}
+
 // ---------- skills dropdown (⚡ next to the model) ----------
 
 async function openSkillsMenu() {
@@ -379,6 +423,7 @@ async function openSkillsMenu() {
     return b;
   };
   const actions = [
+    action("Capture screen", "Pick a screen, then 4s to set it up (e.g. open an extension's popup)", () => startCapture()),
     action("Save images & videos", "Download what's on this page, or attach images", () => state.view !== "media" && showView("media")),
     action("Screenshot this tab", "Attach what's visible right now", async () => addAttachment(await ctx.screenshot())),
     action("Upload a file", "Images, PDFs or text", () => els.fileInput.click()),

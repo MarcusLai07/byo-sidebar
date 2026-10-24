@@ -99,6 +99,24 @@
   }
 
   window.__downloadItems = [{ id: 7, state: "complete", filename: "/Users/me/Downloads/logo.png", finalUrl: `${location.origin}/extension/icons/icon-128.png`, mime: "image/png", fileSize: 4200, startTime: new Date().toISOString(), exists: true }];
+  const realGUM = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
+  navigator.mediaDevices.getUserMedia = async (c) => {
+    if (c?.video?.mandatory?.chromeMediaSource !== "desktop") return realGUM(c);
+    const canvas = Object.assign(document.createElement("canvas"), { width: 1600, height: 900 });
+    const g = canvas.getContext("2d");
+    const draw = () => {
+      g.fillStyle = "#222"; g.fillRect(0, 0, 1600, 900);
+      g.fillStyle = "#4c1d95"; g.fillRect(500, 100, 600, 120);
+      g.fillStyle = "#fff"; g.font = "48px sans-serif"; g.fillText("Wappalyzer", 540, 180);
+      g.fillStyle = "#eee"; g.fillRect(500, 220, 600, 400);
+      g.fillStyle = "#333"; g.font = "32px sans-serif"; g.fillText("Polymer 3.5.0 · YouTube", 530, 300);
+    };
+    draw();
+    setInterval(draw, 200);
+    const stream = canvas.captureStream(10);
+    window.__captureStream = stream;
+    return stream;
+  };
   const session = store("session");
   window.chrome = {
     runtime: {
@@ -154,6 +172,10 @@
         onInstalled: listeners(), onUninstalled: listeners(), onEnabled: listeners(), onDisabled: listeners(),
       };
     })(),
+    // Fake screen capture: the "screen" is a canvas with a popup-like box drawn on it.
+    desktopCapture: {
+      chooseDesktopMedia: (sources, cb) => setTimeout(() => cb(window.__cancelPicker ? "" : "fake-screen"), 30),
+    },
     tabGroups: { query: async () => [{ id: 9, title: "Research", windowId: 1 }] },
     windows: { update: async () => {}, WINDOW_ID_CURRENT: -2 },
     scripting: {

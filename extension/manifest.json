@@ -20,7 +20,8 @@
     "contextMenus",
     "downloads",
     "declarativeNetRequestWithHostAccess",
-    "management"
+    "management",
+    "desktopCapture"
   ],
   "host_permissions": [
     "<all_urls>"

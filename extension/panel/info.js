@@ -24,6 +24,7 @@ const GUIDE = [
   ["Media strip", "Tabs playing (or paused) audio or video get a mini player above the box: play/pause, skip, seek, mute. Two or more show side by side. ⌄ minimizes them to small tabs; click one to open just that player. ✕ pauses it and hides it until it plays again."],
   ["Shortcut", "Set a keyboard shortcut in your browser's extensions → Keyboard shortcuts page. In Dia, move Dia's own Chat shortcut first (Settings → Shortcuts)."],
   ["Browsing", "The chat can read your other tabs, follow links (opened in a background tab and closed after) and load more YouTube comments when it needs more to answer. Read-only: it never clicks or types. Turn it off under Models & keys."],
+  ["Screen capture", "⚡ → Capture screen, or 📸 on an extension in the extensions list: pick a screen, then open whatever you want (another extension's popup, an app) during the 4-second countdown. One frame is attached to your message and sharing stops."],
   ["Voice", "Click the mic to dictate. Some browsers don't include speech recognition."],
 ];
 

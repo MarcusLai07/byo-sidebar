@@ -127,5 +127,23 @@ export function busy(el, isBusy) {
   }
 }
 
+// Capture countdown: the number punches in each second and the ring drains.
+// Shows `secondsLeft`, and drains the ring to where it'll be one second later.
+export function countdownTick(num, arc, secondsLeft, total) {
+  num.textContent = secondsLeft;
+  const offset = 100 - (100 * (secondsLeft - 1)) / total;
+  if (!on()) {
+    arc.style.strokeDashoffset = offset;
+    return;
+  }
+  animate(num, { scale: [1.6, 1], opacity: [0, 1], ease: springy(0.45, 500) });
+  animate(arc, { strokeDashoffset: offset, duration: 950, ease: "linear" });
+}
+
+export function flash(el) {
+  if (!on() || !el) return;
+  animate(el, { backgroundColor: ["rgba(255,255,255,0.9)", "rgba(255,255,255,0)"], duration: 450, ease: "out(2)" });
+}
+
 // For the classic media-strip script, which can't import modules.
 window.lumenMotion = { popIn, tilesIn, cascade };
