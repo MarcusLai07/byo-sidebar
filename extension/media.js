@@ -193,12 +193,16 @@
     return b;
   }
 
-  function setCollapsed(on) {
+  async function setCollapsed(on) {
+    const m = window.lumenMotion;
+    const old = [...els.list.querySelectorAll(".media-cards, .media-pills, .player")];
+    if (m) await m.leave(old, { y: on ? 6 : -6, scale: 0.95, duration: 150 });
     collapsed = on;
     focusId = null;
     try {
       localStorage.setItem("mediaCollapsed", on ? "1" : "0");
     } catch {}
+    shownIds = new Set(); // everything that appears now animates in
     render(lastPlayers);
   }
 

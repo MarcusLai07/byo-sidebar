@@ -127,23 +127,35 @@ export function busy(el, isBusy) {
   }
 }
 
-// Capture countdown: the number punches in each second and the ring drains.
-// Shows `secondsLeft`, and drains the ring to where it'll be one second later.
-export function countdownTick(num, arc, secondsLeft, total) {
-  num.textContent = secondsLeft;
-  const offset = 100 - (100 * (secondsLeft - 1)) / total;
-  if (!on()) {
-    arc.style.strokeDashoffset = offset;
-    return;
-  }
-  animate(num, { scale: [1.6, 1], opacity: [0, 1], ease: springy(0.45, 500) });
-  animate(arc, { strokeDashoffset: offset, duration: 950, ease: "linear" });
+// ---------- exits: the reverse of each entrance, quick and eased out ----------
+
+// Animate something away; resolves when it's gone (immediately if motion is off).
+export function leave(targets, { y = 6, scale = 0.96, duration = 170, x = 0 } = {}) {
+  const list = targets instanceof Element ? [targets] : [...(targets || [])];
+  if (!on() || !list.length) return Promise.resolve();
+  return new Promise((resolve) => {
+    const anim = animate(list, { opacity: 0, translateY: y, translateX: x, scale, duration, ease: "in(2)" });
+    anim.then(resolve);
+    setTimeout(resolve, duration + 120); // never block the UI on an animation
+  });
 }
 
-export function flash(el) {
-  if (!on() || !el) return;
-  animate(el, { backgroundColor: ["rgba(255,255,255,0.9)", "rgba(255,255,255,0)"], duration: 450, ease: "out(2)" });
+// The ⚡ menu folds back up toward its button.
+export function menuOut(menu) {
+  if (!on()) return Promise.resolve();
+  return new Promise((resolve) => {
+    animate(menu.querySelectorAll(".menu-heading, .item"), { opacity: 0, translateX: -6, duration: 120, delay: stagger(8, { from: "last" }), ease: "in(2)" });
+    const anim = animate(menu, { opacity: 0, scaleY: 0.9, scaleX: 0.97, translateY: -4, duration: 190, delay: 40, ease: "in(3)" });
+    anim.then(resolve);
+    setTimeout(resolve, 360);
+  });
+}
+
+// Remove inline styles left by animations so CSS takes over again.
+export function reset(el) {
+  if (!el) return;
+  for (const p of ["opacity", "transform", "translate", "scale"]) el.style.removeProperty(p); // keeps top/left
 }
 
 // For the classic media-strip script, which can't import modules.
-window.lumenMotion = { popIn, tilesIn, cascade };
+window.lumenMotion = { popIn, tilesIn, cascade, leave, reset };

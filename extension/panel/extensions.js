@@ -9,7 +9,6 @@ const count = document.getElementById("ext-count");
 
 let all = [];
 let onChange = () => {};
-let deps = {};
 
 const iconOf = (e) => (e.icons?.length ? [...e.icons].sort((a, b) => b.size - a.size)[0].url : "");
 
@@ -46,7 +45,6 @@ function row(e) {
     b.addEventListener("click", fn);
     return b;
   };
-  if (!self && e.enabled) actions.append(btn("📸", "Capture its popup into the chat", () => deps.capture?.(e)));
   if (e.optionsUrl) actions.append(btn("⚙", "Options", () => chrome.tabs.create({ url: e.optionsUrl })));
   actions.append(btn("ⓘ", "Details", () => chrome.tabs.create({ url: `chrome://extensions/?id=${e.id}` })));
   if (!self && e.mayDisable) {
@@ -107,9 +105,8 @@ if (chrome.management?.onEnabled) {
 }
 
 // changed(list) is called after each redraw (the panel animates the rows in).
-export function renderExtensions({ changed, capture } = {}) {
+export function renderExtensions({ changed } = {}) {
   onChange = changed || (() => {});
-  deps = { capture };
   search.value = "";
   return load();
 }

@@ -13,7 +13,7 @@ import { renderHistory } from "./history.js";
 import { renderMedia } from "./saver.js";
 import { renderExtensions } from "./extensions.js";
 import * as motion from "./motion.js";
-import { captureScreen } from "./capture.js";
+import * as techstack from "./techstack.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -111,8 +111,23 @@ els.model.addEventListener("change", () => localStorage.setItem("model", els.mod
 
 // ---------- views ----------
 
+let switching = Promise.resolve();
 function showView(view) {
-  state.view = state.view === view ? null : view;
+  // Serialize switches so a quick double-click can't interleave exits and entrances.
+  switching = switching.then(() => switchView(view));
+  return switching;
+}
+
+const viewEl = (v) => ({ history: els.historyView, info: els.infoView, media: els.mediaView, extensions: els.extView })[v] || els.messages;
+
+async function switchView(view) {
+  const next = state.view === view ? null : view;
+  if (next !== state.view) {
+    const leaving = viewEl(state.view);
+    await motion.leave(leaving, { y: 10, scale: 0.985, duration: 150 });
+    motion.reset(leaving);
+  }
+  state.view = next;
   els.historyView.hidden = state.view !== "history";
   els.infoView.hidden = state.view !== "info";
   els.mediaView.hidden = state.view !== "media";
@@ -121,8 +136,7 @@ function showView(view) {
   els.messages.hidden = state.view !== null;
   els.historyBtn.classList.toggle("on", state.view === "history");
   els.infoBtn.classList.toggle("on", state.view === "info");
-  const shown = { history: els.historyView, info: els.infoView, media: els.mediaView, extensions: els.extView }[state.view] || els.messages;
-  motion.viewIn(shown);
+  motion.viewIn(viewEl(state.view));
   if (state.view === "history") {
     renderHistory({ onOpen: openChat, currentId: state.chat?.id }).then(() => motion.cascade(els.historyView.querySelectorAll(".history-item")));
   }
@@ -132,10 +146,7 @@ function showView(view) {
   }
   if (state.view === "extensions") {
     let first = true;
-    renderExtensions({
-      changed: (list) => first && ((first = false), motion.cascade(list.children, { gap: 22 })),
-      capture: (ext) => startCapture({ label: `${ext.name}`, hint: `Now open ${ext.name}'s popup from the toolbar. Lumen captures when the count hits zero.` }),
-    });
+    renderExtensions({ changed: (list) => first && ((first = false), motion.cascade(list.children, { gap: 22 })) });
   }
   if (state.view === "media") {
     // "done" returns to the chat with the images attached
@@ -240,7 +251,8 @@ function messageEl(msg, index) {
     meta.textContent = msg.model || "";
     el.append(actions([
       ["Copy", () => navigator.clipboard.writeText(msg.text || "").then(() => toast("Copied"))],
-      ["Regenerate", () => regenerate(index)],
+      // Local answers (tech stack) came from Lumen itself, not a model: nothing to regenerate.
+      ...(msg.local ? [] : [["Regenerate", () => regenerate(index)]]),
     ], meta));
   }
   return el;
@@ -310,44 +322,46 @@ els.messages.addEventListener("click", async (e) => {
   if (!ok) toast("No video or audio found in that tab.");
 });
 
-// ---------- screen capture ----------
+// ---------- local actions (no AI) ----------
 
-let captureAbort = null;
-document.getElementById("cd-cancel").addEventListener("click", () => captureAbort?.abort());
+// Tech stack: detected on this device and added to the chat as Lumen's own answer.
+// The user turn's prompt carries the list too, so a follow-up question sees it.
+async function runTechStack() {
+  if (state.pending) return;
+  const tab = await ctx.activeTab();
+  if (!tab) return toast("No tab to inspect.");
+  if (state.view) showView(state.view);
+  state.chat ??= newChatObject();
+  const chat = state.chat;
+  const userMsg = { role: "user", display: "Detect tech stack", prompt: "", labels: [`📎 ${tab.title}`] };
+  chat.messages.push(userMsg);
+  els.empty.hidden = true;
+  const userEl = messageEl(userMsg, chat.messages.length - 1);
+  els.messages.append(userEl);
+  motion.popIn(userEl, { from: 10, scale: 0.9 });
 
-// Pick a screen, count down while the user opens what they want (popups close on any
-// click, so they open it after picking), then attach one frame to the next message.
-async function startCapture({ label = "Screen capture", hint = "Get what you want to capture on screen. Lumen captures when the count hits zero." } = {}) {
-  const overlay = document.getElementById("countdown");
-  const num = overlay.querySelector(".cd-num");
-  const arc = overlay.querySelector(".cd-arc");
-  const seconds = 4;
-  captureAbort = new AbortController();
+  const msg = { role: "assistant", text: "", model: "Lumen · on this device, no AI", local: true };
+  chat.messages.push(msg);
+  const el = messageEl(msg, chat.messages.length - 1);
+  el.classList.add("streaming");
+  els.messages.append(el);
+  motion.popIn(el, { from: 6, scale: 0.98 });
+  const stop = motion.thinking(el.querySelector(".body"));
+  scrollDown();
   try {
-    const image = await captureScreen({
-      seconds,
-      label,
-      signal: captureAbort.signal,
-      onTick: (left) => {
-        if (left === seconds) {
-          overlay.querySelector(".cd-text").textContent = hint;
-          arc.style.strokeDashoffset = "0";
-          overlay.hidden = false;
-          motion.viewIn(overlay);
-        }
-        if (left === 0) overlay.hidden = true;
-        else motion.countdownTick(num, arc, left, seconds);
-      },
-    });
-    if (state.view) showView(state.view); // back to the chat
-    addAttachment(image);
-    toast("Captured. Ask about it below.");
+    const result = await techstack.detect(tab);
+    msg.text = techstack.toMarkdown(result);
+    userMsg.prompt = `Detect the tech stack of ${tab.url}. (Lumen detected it locally; its answer follows.)`;
   } catch (e) {
-    toast(e.message);
-  } finally {
-    overlay.hidden = true;
-    captureAbort = null;
+    msg.error = e.message;
+    userMsg.prompt = `Detect the tech stack of ${tab.url}.`;
   }
+  stop();
+  el.replaceWith(messageEl(msg, chat.messages.indexOf(msg)));
+  // The model's next turn can't resume a CLI session that never saw these turns.
+  chat.needsReplay = true;
+  scrollDown();
+  await persist();
 }
 
 // ---------- skills dropdown (⚡ next to the model) ----------
@@ -423,28 +437,38 @@ async function openSkillsMenu() {
     return b;
   };
   const actions = [
-    action("Capture screen", "Pick a screen, then 4s to set it up (e.g. open an extension's popup)", () => startCapture()),
+    action("Detect tech stack", "Frameworks, CMS, analytics, hosting… found on this device, no AI or tokens", () => runTechStack()),
     action("Save images & videos", "Download what's on this page, or attach images", () => state.view !== "media" && showView("media")),
     action("Screenshot this tab", "Attach what's visible right now", async () => addAttachment(await ctx.screenshot())),
     action("Upload a file", "Images, PDFs or text", () => els.fileInput.click()),
   ];
   els.skillsMenu.replaceChildren(heading("Actions"), ...actions, heading("Skills"), ...list.map(item), manage);
+  const r = els.skillsBtn.getBoundingClientRect();
+  els.skillsMenu.style.top = `${r.bottom + 8}px`;
+  els.skillsMenu.style.left = `${Math.max(8, r.left - 6)}px`;
   els.skillsMenu.classList.add("open");
   motion.menuIn(els.skillsMenu);
   els.skillsBtn.classList.add("on");
   els.skillsBtn.setAttribute("aria-expanded", "true");
 }
 
-function closeSkillsMenu() {
+let closingMenu = false;
+async function closeSkillsMenu() {
+  if (!els.skillsMenu.classList.contains("open") || closingMenu) return;
+  closingMenu = true;
+  els.skillsBtn.classList.remove("on");
+  await motion.menuOut(els.skillsMenu);
   els.skillsMenu.classList.remove("open");
-  els.skillsMenu.style.opacity = els.skillsMenu.style.transform = ""; // hand back to the CSS close transition
+  els.skillsMenu.querySelectorAll("*").forEach(motion.reset);
+  motion.reset(els.skillsMenu);
+  closingMenu = false;
   els.skillsBtn.classList.remove("on");
   els.skillsBtn.setAttribute("aria-expanded", "false");
 }
 
 els.skillsBtn.addEventListener("click", () => (els.skillsMenu.classList.contains("open") ? closeSkillsMenu() : openSkillsMenu()));
 document.addEventListener("click", (e) => {
-  if (!e.target.closest(".skills-wrap")) closeSkillsMenu();
+  if (!e.target.closest(".skills-wrap, #skills-menu")) closeSkillsMenu();
 });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeSkillsMenu();
@@ -775,7 +799,11 @@ function toast(text) {
   els.toast.hidden = false;
   motion.toastIn(els.toast);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (els.toast.hidden = true), 2600);
+  toastTimer = setTimeout(async () => {
+    await motion.leave(els.toast, { y: 14, scale: 0.92, duration: 200 });
+    els.toast.hidden = true;
+    motion.reset(els.toast);
+  }, 2600);
 }
 
 // ---------- composer: context chips ----------
@@ -820,7 +848,10 @@ function renderChips() {
     x.type = "button";
     x.textContent = "✕";
     x.title = "Remove";
-    x.addEventListener("click", onRemove);
+    x.addEventListener("click", async () => {
+      await motion.leave(c, { y: 0, scale: 0.7, duration: 140 });
+      onRemove();
+    });
     c.append(label, x);
     els.chips.append(c);
   };

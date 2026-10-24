@@ -21,7 +21,7 @@ http
         data = Buffer.from(String(data).replace("<script", '<script src="/dev/chrome-stub.js"></script>\n  <script'));
       }
       res
-        .writeHead(200, { "content-type": types[path.extname(file)] || "application/octet-stream", "content-length": data.length })
+        .writeHead(200, { "content-type": types[path.extname(file)] || "application/octet-stream", "content-length": data.length, "access-control-allow-origin": "*" })
         .end(req.method === "HEAD" ? undefined : data);
     });
   })

@@ -752,9 +752,9 @@ button.primary { background: var(--accent) !important; border-color: var(--accen
 #skills-btn.on, #skills-btn:hover { color: var(--accent); }
 
 .dropdown {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
+  position: fixed; /* placed under the ⚡ button by main.js */
+  top: 56px;
+  left: 12px;
   z-index: 30;
   width: min(320px, calc(100vw - 24px));
   max-height: min(420px, 70vh);
@@ -1040,37 +1040,3 @@ button.refresh.spinning { animation: spin 0.6s linear infinite; }
 .msg.assistant.streaming .body:has(.thinking)::after { content: none; }
 #send { transition: background 0.2s; }
 
-/* ---------- capture countdown ---------- */
-
-.countdown {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(6px);
-  text-align: center;
-}
-
-.cd-ring { position: relative; width: 132px; height: 132px; }
-.cd-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-.cd-track, .cd-arc { fill: none; stroke-width: 6; }
-.cd-track { stroke: var(--border); }
-.cd-arc { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 0; }
-.cd-num { position: absolute; inset: 0; display: grid; place-items: center; color: var(--fg); font-size: 52px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.cd-text { max-width: 280px; margin: 0; color: var(--muted); font-size: 13px; }
-
-#cd-cancel {
-  padding: 6px 14px;
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 12.5px;
-}
-
-#cd-cancel:hover { background: var(--surface); }
