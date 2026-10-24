@@ -17,7 +17,7 @@ const GUIDE = [
   ["Attachments", "Use the paperclip to upload images, PDFs or text files, screenshot the tab, or pick a recent download. You can also paste images."],
   ["PDFs", "Open a PDF in a tab and ask about it: the sidebar sends the PDF itself."],
   ["Videos", "Timestamps in answers are links: click one to jump the video. On YouTube, open “Show transcript” under the video for answers based on the full captions."],
-  ["Right-click", "Select text and right-click → BYO Sidebar to explain, translate or copy-edit it. Right-click an image to ask about it."],
+  ["Right-click", "Select text and right-click → Lumen to explain, translate or copy-edit it. Right-click an image to ask about it."],
   ["Address bar", "Type ai, a space, then your question in the address bar."],
   ["Edit & regenerate", "Hover a message to edit your question or regenerate the answer. You can switch models mid-chat."],
   ["History", "Every chat is saved on this Mac. Open the clock to search and reopen them."],
@@ -72,7 +72,7 @@ function keysSection({ keys, post }) {
     return el("div", {}, form, el("a", { class: "key-link", href: p.url, target: "_blank", rel: "noopener" }, keys[p.name] ? "Manage key ↗" : "Get a key ↗"));
   });
   return [
-    el("p", { class: "hint" }, "Stored only on this Mac in ~/.config/byo-sidebar/config.json. Save an empty box to remove a key."),
+    el("p", { class: "hint" }, "Stored only on this Mac in ~/.config/lumen/config.json. Save an empty box to remove a key."),
     ...rows,
   ];
 }
@@ -241,8 +241,8 @@ export function renderInfo(container, deps) {
     section("guide", "Features & guide",
       el("dl", { class: "guide" }, ...GUIDE.flatMap(([t, d]) => [el("dt", {}, t), el("dd", {}, d)]))),
     section("about", "About",
-      el("p", {}, `BYO Sidebar ${chrome.runtime.getManifest().version}. Your chats, keys and history stay on this Mac; questions go only to the model you pick.`),
-      el("p", {}, el("a", { href: "https://github.com/MarcusLai07/byo-sidebar", target: "_blank", rel: "noopener" }, "Source code ↗")))
+      el("p", {}, `Lumen ${chrome.runtime.getManifest().version}. Your chats, keys and history stay on this Mac; questions go only to the model you pick.`),
+      el("p", {}, el("a", { href: "https://github.com/MarcusLai07/lumen", target: "_blank", rel: "noopener" }, "Source code ↗")))
   );
   container.scrollTop = scroll;
 }

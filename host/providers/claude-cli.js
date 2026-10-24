@@ -7,14 +7,14 @@ const { anthropicContent, withTranscript } = require("./http");
 const path = require("path");
 const { MAX_CALLS, BROWSE_PROMPT, pick } = require("./tools");
 
-const BIN = process.env.BYO_CLAUDE_BIN || "claude";
+const BIN = process.env.LUMEN_CLAUDE_BIN || "claude";
 
 function browseArgs(requestId, names) {
   const tools = pick(names);
   const server = {
     command: process.execPath, // the router's own node
     args: [path.join(__dirname, "mcp-browse.js")],
-    env: { BYO_BRIDGE: process.env.BYO_BRIDGE, BYO_REQUEST: requestId, BYO_TOOLS: tools.map((t) => t.name).join(",") },
+    env: { LUMEN_BRIDGE: process.env.LUMEN_BRIDGE, LUMEN_REQUEST: requestId, LUMEN_TOOLS: tools.map((t) => t.name).join(",") },
   };
   return [
     "--mcp-config", JSON.stringify({ mcpServers: { browse: server } }),

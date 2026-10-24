@@ -1,6 +1,6 @@
 // Connection to the local router (native messaging host).
 
-const HOST = "com.byo_sidebar.router";
+const HOST = "com.lumen.router";
 
 const listeners = {}; // message type -> [fn]
 const requests = new Map(); // chat request id -> handlers

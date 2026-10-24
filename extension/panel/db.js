@@ -8,6 +8,7 @@
 // message = { role: "user" | "assistant", display, prompt?, text?, error?, model?,
 //             labels?: [string], pages?: [url] /* pages whose text it carried */, sourceTabId?, sourceUrl? }
 
+// Kept from the project's old name (BYO Sidebar) so existing chat history stays.
 const DB = "byo-sidebar";
 const STORE = "chats";
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BYO Sidebar</title>
+  <title>Lumen</title>
   <link rel="icon" href="icons/icon-32.png">
   <link rel="stylesheet" href="sidepanel.css">
 </head>
@@ -22,6 +22,9 @@
     <button id="history-btn" class="icon" title="Chat history" aria-label="Chat history">
       <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 6v4l3 2"/></svg>
     </button>
+    <button id="ext-btn" class="icon" title="Manage extensions" aria-label="Manage extensions">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 3.5a1.7 1.7 0 0 1 3.4 0V5H14a1 1 0 0 1 1 1v2.6h-1.4a1.7 1.7 0 0 0 0 3.4H15V15a1 1 0 0 1-1 1h-2.6v-1.4a1.7 1.7 0 0 0-3.4 0V16H5a1 1 0 0 1-1-1v-3h1.5a1.7 1.7 0 0 0 0-3.4H4V6a1 1 0 0 1 1-1h3z"/></svg>
+    </button>
     <button id="info-btn" class="icon" title="Models, skills & guide" aria-label="Models, skills and guide">
       <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M10 9v5M10 6.2v.1"/></svg>
     </button>
@@ -33,6 +36,18 @@
   </section>
 
   <section id="info-view" class="view" hidden></section>
+
+  <section id="extensions-view" class="view" hidden>
+    <div class="ext-head">
+      <input id="ext-search" type="search" placeholder="Search extensions…" autocomplete="off">
+      <span id="ext-count" class="hint"></span>
+    </div>
+    <div id="ext-list"></div>
+    <div class="ext-foot">
+      <button id="ext-page">All extension settings ↗</button>
+      <button id="ext-store">Get more ↗</button>
+    </div>
+  </section>
 
   <section id="media-view" class="view" hidden>
     <div class="media-head">

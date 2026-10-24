@@ -1,11 +1,11 @@
-// API keys live in ~/.config/byo-sidebar/config.json (owner-only permissions),
+// API keys live in ~/.config/lumen/config.json (owner-only permissions),
 // never in the extension, so web pages and other extensions can't reach them.
 
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const DIR = path.join(os.homedir(), ".config", "byo-sidebar");
+const DIR = path.join(os.homedir(), ".config", "lumen");
 const FILE = path.join(DIR, "config.json");
 
 function load() {

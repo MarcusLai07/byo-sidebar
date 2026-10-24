@@ -110,6 +110,7 @@
   })();
   let focusId = null; // tab id of the player expanded while minimized
   let lastPlayers = [];
+  let shownIds = new Set(); // players already on screen, so only new ones animate in
 
   async function run(tabId, func, args) {
     try {
@@ -166,7 +167,7 @@
         await chrome.scripting.executeScript({ target, world: "MAIN", func: control, args: [ADAPTERS, action, value ?? null] });
       }
     } catch (e) {
-      console.warn("BYO Sidebar media control failed:", action, e);
+      console.warn("Lumen media control failed:", action, e);
     }
     setTimeout(refresh, 150);
   }
@@ -207,6 +208,7 @@
     const { tab, state } = p;
     const el = document.createElement("div");
     el.className = `player${compact ? " compact" : ""}`;
+    el.dataset.tab = tab.id;
     el.title = "Go to tab";
     el.addEventListener("click", () => act(p, "focus"));
 
@@ -267,6 +269,7 @@
     const b = document.createElement("button");
     b.type = "button";
     b.className = `media-pill${focusId === tab.id ? " on" : ""}${state.paused ? "" : " playing"}`;
+    b.dataset.tab = tab.id;
     b.title = state.title || tab.title || "";
     const art = document.createElement("img");
     art.alt = "";
@@ -312,6 +315,11 @@
       body.push(grid);
     }
     els.list.replaceChildren(head, ...body);
+    const ids = new Set(players.map((p) => p.tab.id));
+    els.list.querySelectorAll("[data-tab]").forEach((node, i) => {
+      if (!shownIds.has(Number(node.dataset.tab))) window.lumenMotion?.popIn(node, { from: 6, scale: 0.92, delay: i * 40 });
+    });
+    shownIds = ids;
   }
 
   function schedule() {

@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 // Minimal MCP server (stdio, newline-delimited JSON-RPC) that gives a CLI like
 // Claude Code the sidebar's read-only browsing tools. Each call is forwarded over
-// the router's Unix socket (BYO_BRIDGE) to the panel, which runs it in the browser.
+// the router's Unix socket (LUMEN_BRIDGE) to the panel, which runs it in the browser.
 
 const net = require("net");
 const { pick } = require("./tools");
 
-const TOOLS = pick(process.env.BYO_TOOLS ? process.env.BYO_TOOLS.split(",") : null);
+const TOOLS = pick(process.env.LUMEN_TOOLS ? process.env.LUMEN_TOOLS.split(",") : null);
 
-const REQUEST = process.env.BYO_REQUEST;
-const sock = net.connect(process.env.BYO_BRIDGE);
+const REQUEST = process.env.LUMEN_REQUEST;
+const sock = net.connect(process.env.LUMEN_BRIDGE);
 const waiting = new Map(); // callId -> resolve
 
 let sockBuf = "";
@@ -42,7 +42,7 @@ async function handle(msg) {
     return reply(id, {
       protocolVersion: params?.protocolVersion || "2025-06-18",
       capabilities: { tools: {} },
-      serverInfo: { name: "byo-sidebar-browse", version: "1.0.0" },
+      serverInfo: { name: "lumen-browse", version: "1.0.0" },
     });
   }
   if (method === "tools/list") {

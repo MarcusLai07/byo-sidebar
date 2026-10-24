@@ -4,7 +4,7 @@
 //   2. otherwise download the audio and transcribe it here: Parakeet (English and
 //      European languages, fast) or whisper.cpp (any language) (minutes)
 //   3. separately, Gemini can "watch" a public YouTube video, if there's a Gemini key
-// Results are cached per video in ~/Library/Caches/byo-sidebar/transcripts.
+// Results are cached per video in ~/Library/Caches/lumen/transcripts.
 
 const { spawn } = require("child_process");
 const fs = require("fs");
@@ -13,16 +13,16 @@ const path = require("path");
 const config = require("./config");
 
 const BIN = {
-  ytdlp: process.env.BYO_YTDLP_BIN || "yt-dlp",
-  parakeet: process.env.BYO_PARAKEET_BIN || "parakeet-mlx",
-  whisper: process.env.BYO_WHISPER_BIN || "whisper-cli",
+  ytdlp: process.env.LUMEN_YTDLP_BIN || "yt-dlp",
+  parakeet: process.env.LUMEN_PARAKEET_BIN || "parakeet-mlx",
+  whisper: process.env.LUMEN_WHISPER_BIN || "whisper-cli",
 };
-const CACHE = path.join(os.homedir(), "Library", "Caches", "byo-sidebar", "transcripts");
-const WORK = path.join(os.tmpdir(), "byo-sidebar-video");
-const MODELS = path.join(os.homedir(), "Library", "Application Support", "byo-sidebar", "models");
-// Override with BYO_WHISPER_MODEL (a file name from huggingface.co/ggerganov/whisper.cpp,
+const CACHE = path.join(os.homedir(), "Library", "Caches", "lumen", "transcripts");
+const WORK = path.join(os.tmpdir(), "lumen-video");
+const MODELS = path.join(os.homedir(), "Library", "Application Support", "lumen", "models");
+// Override with LUMEN_WHISPER_MODEL (a file name from huggingface.co/ggerganov/whisper.cpp,
 // e.g. ggml-small.bin) for a smaller download.
-const WHISPER_MODEL = process.env.BYO_WHISPER_MODEL || "ggml-large-v3-turbo.bin";
+const WHISPER_MODEL = process.env.LUMEN_WHISPER_MODEL || "ggml-large-v3-turbo.bin";
 const WHISPER_MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${WHISPER_MODEL}`;
 const OUTPUT_LIMIT = 90000; // characters of transcript kept per video
 const CHUNK = 30000; // characters per tool call; the model pages with `offset`
@@ -205,8 +205,8 @@ async function transcript(url, progress, offset = 0) {
   let result = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile, "utf8")) : null;
 
   if (!result) {
-    // BYO_VIDEO_FORCE_LOCAL=1 skips captions (for testing the transcription path).
-    const pick = process.env.BYO_VIDEO_FORCE_LOCAL ? null : pickCaptions(info);
+    // LUMEN_VIDEO_FORCE_LOCAL=1 skips captions (for testing the transcription path).
+    const pick = process.env.LUMEN_VIDEO_FORCE_LOCAL ? null : pickCaptions(info);
     if (pick) {
       progress(`Reading YouTube ${pick.kind}`);
       result = { source: `YouTube ${pick.kind} (${pick.lang})`, segments: await fetchCaptions(pick) };

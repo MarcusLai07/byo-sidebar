@@ -34,8 +34,8 @@ const MENU = [
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({ id: "byo", title: "BYO Sidebar", contexts: ["selection", "page", "image"] });
-    for (const item of MENU) chrome.contextMenus.create({ ...item, parentId: "byo" });
+    chrome.contextMenus.create({ id: "lumen", title: "Lumen", contexts: ["selection", "page", "image"] });
+    for (const item of MENU) chrome.contextMenus.create({ ...item, parentId: "lumen" });
   });
 });
 
@@ -60,7 +60,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 // ---------- address bar: type "ai", a space, and a question ----------
 
-chrome.omnibox.setDefaultSuggestion({ description: "Ask BYO Sidebar: %s" });
+chrome.omnibox.setDefaultSuggestion({ description: "Ask Lumen: %s" });
 chrome.omnibox.onInputEntered.addListener((text) => {
   openPanel(chrome.windows.WINDOW_ID_CURRENT);
   hand({ kind: "ask", text });

@@ -58,6 +58,8 @@ kbd {
 /* ---------- header ---------- */
 
 header {
+  position: relative;
+  z-index: 20; /* above the views, so the ⚡ menu stays on top even mid-animation */
   display: flex;
   gap: 6px;
   align-items: center;
@@ -952,3 +954,88 @@ button.refresh:hover { background: var(--surface); color: var(--fg); }
 button.refresh.spinning { animation: spin 0.6s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .download.active small { color: var(--accent); }
+
+/* ---------- extensions view ---------- */
+
+#extensions-view { display: flex; flex-direction: column; gap: 8px; }
+.ext-head { display: flex; gap: 8px; align-items: center; }
+.ext-head .hint { margin: 0; white-space: nowrap; }
+
+#ext-search {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+}
+
+.ext-heading {
+  margin: 6px 0 2px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ext-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.ext-row.off .ext-icon, .ext-row.off .ext-info { opacity: 0.5; filter: grayscale(1); }
+.ext-icon { width: 28px; height: 28px; border-radius: 6px; object-fit: contain; }
+.ext-icon:not([src]) { visibility: hidden; }
+.ext-info { display: flex; flex-direction: column; min-width: 0; }
+.ext-info strong { overflow: hidden; font-size: 12.5px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.ext-info small { color: var(--muted); font-size: 11px; }
+.ext-actions { display: flex; gap: 2px; align-items: center; }
+
+.ext-actions button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ext-actions button:hover { background: var(--hover); color: var(--fg); }
+
+.switch { position: relative; display: inline-block; width: 32px; height: 18px; margin-left: 4px; flex-shrink: 0; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch span { position: absolute; inset: 0; background: var(--border); border-radius: 999px; transition: background 0.2s; }
+.switch span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: #fff; border-radius: 50%; transition: transform 0.2s cubic-bezier(0.3, 1.4, 0.5, 1); }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { transform: translateX(14px); }
+.switch input:disabled + span { opacity: 0.4; cursor: default; }
+
+.ext-foot { display: flex; gap: 6px; justify-content: space-between; margin-top: 4px; }
+
+.ext-foot button {
+  padding: 5px 10px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ext-foot button:hover { background: var(--surface); color: var(--fg); }
+
+/* ---------- motion helpers ---------- */
+
+.thinking { display: inline-flex; gap: 4px; align-items: center; height: 18px; }
+.thinking i { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; opacity: 0.35; }
+.msg.assistant.streaming .body:has(.thinking)::after { content: none; }
+#send { transition: background 0.2s; }

@@ -11,12 +11,16 @@ import { createRunner, urlsIn } from "./tools.js";
 import { renderInfo } from "./info.js";
 import { renderHistory } from "./history.js";
 import { renderMedia } from "./saver.js";
+import { renderExtensions } from "./extensions.js";
+import * as motion from "./motion.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
   skillsBtn: $("skills-btn"),
   skillsMenu: $("skills-menu"),
   mediaView: $("media-view"),
+  extView: $("extensions-view"),
+  extBtn: $("ext-btn"),
   model: $("model"),
   newChat: $("new-chat"),
   historyBtn: $("history-btn"),
@@ -111,13 +115,27 @@ function showView(view) {
   els.historyView.hidden = state.view !== "history";
   els.infoView.hidden = state.view !== "info";
   els.mediaView.hidden = state.view !== "media";
+  els.extView.hidden = state.view !== "extensions";
+  els.extBtn.classList.toggle("on", state.view === "extensions");
   els.messages.hidden = state.view !== null;
   els.historyBtn.classList.toggle("on", state.view === "history");
   els.infoBtn.classList.toggle("on", state.view === "info");
-  if (state.view === "history") renderHistory({ onOpen: openChat, currentId: state.chat?.id });
-  if (state.view === "info") showInfo();
+  const shown = { history: els.historyView, info: els.infoView, media: els.mediaView, extensions: els.extView }[state.view] || els.messages;
+  motion.viewIn(shown);
+  if (state.view === "history") {
+    renderHistory({ onOpen: openChat, currentId: state.chat?.id }).then(() => motion.cascade(els.historyView.querySelectorAll(".history-item")));
+  }
+  if (state.view === "info") {
+    showInfo();
+    motion.cascade(els.infoView.querySelectorAll(".acc"), { gap: 45 });
+  }
+  if (state.view === "extensions") {
+    let first = true;
+    renderExtensions({ changed: (list) => first && ((first = false), motion.cascade(list.children, { gap: 22 })) });
+  }
   if (state.view === "media") {
-    renderMedia(mediaDeps()); // "done" returns to the chat with the images attached
+    // "done" returns to the chat with the images attached
+    renderMedia(mediaDeps()).then(() => motion.tilesIn(els.mediaView.querySelectorAll(".media-tile")));
   }
 }
 
@@ -136,6 +154,7 @@ function showInfo() {
 
 els.historyBtn.addEventListener("click", () => showView("history"));
 els.infoBtn.addEventListener("click", () => showView("info"));
+els.extBtn.addEventListener("click", () => showView("extensions"));
 
 // ---------- chats ----------
 
@@ -162,6 +181,7 @@ async function openChat(id) {
   cancelEdit();
   fillModels();
   renderAll();
+  motion.cascade(els.messages.querySelectorAll(".msg"), { gap: 35, max: 12 });
   showView(state.view); // close the history view
 }
 
@@ -224,6 +244,9 @@ function messageEl(msg, index) {
 
 // What the model did while browsing: "Opening 1001tracklists.com ✓".
 function fillTools(box, msg) {
+  const before = Number(box.dataset.rows || 0);
+  box.dataset.rows = String(msg.tools?.length || 0);
+  queueMicrotask(() => [...box.children].slice(before).forEach((r) => motion.popIn(r, { from: 4, scale: 0.98 })));
   box.replaceChildren(
     ...(msg.tools || []).map((t) => {
       const row = document.createElement("div");
@@ -362,12 +385,14 @@ async function openSkillsMenu() {
   ];
   els.skillsMenu.replaceChildren(heading("Actions"), ...actions, heading("Skills"), ...list.map(item), manage);
   els.skillsMenu.classList.add("open");
+  motion.menuIn(els.skillsMenu);
   els.skillsBtn.classList.add("on");
   els.skillsBtn.setAttribute("aria-expanded", "true");
 }
 
 function closeSkillsMenu() {
   els.skillsMenu.classList.remove("open");
+  els.skillsMenu.style.opacity = els.skillsMenu.style.transform = ""; // hand back to the CSS close transition
   els.skillsBtn.classList.remove("on");
   els.skillsBtn.setAttribute("aria-expanded", "false");
 }
@@ -471,7 +496,8 @@ async function send(text) {
 
   state.chat ??= newChatObject();
   const chat = state.chat;
-  if (state.editIndex != null) {
+  const edited = state.editIndex != null;
+  if (edited) {
     chat.messages = chat.messages.slice(0, state.editIndex);
     chat.needsReplay = true; // the CLI session still holds the old turns
     if (state.editIndex === 0) chat.title = "New chat"; // retitle from the edited question
@@ -482,7 +508,15 @@ async function send(text) {
   const userMsg = { role: "user", display: built.display, prompt: built.prompt, labels: built.labels, attachments: built.attachments, pages: built.pages };
   chat.messages.push(userMsg);
   clearComposerContext();
-  renderAll();
+  if (edited) renderAll();
+  else {
+    // Add just the new message (re-rendering everything would replay every animation).
+    els.empty.hidden = true;
+    const el = messageEl(userMsg, chat.messages.length - 1);
+    els.messages.append(el);
+    motion.popIn(el, { from: 10, scale: 0.9 });
+    scrollDown();
+  }
   await respond(userMsg, built.sourceTab);
 }
 
@@ -519,8 +553,10 @@ async function respond(userMsg, sourceTab, { retried = false } = {}) {
   el.classList.add("streaming");
   els.messages.append(el);
   els.empty.hidden = true;
+  motion.popIn(el, { from: 6, scale: 0.98 });
   scrollDown();
   const body = el.querySelector(".body");
+  let stopThinking = motion.thinking(body);
   const toolBox = el.querySelector(".tools");
 
   // Read-only browsing: links already in the chat can be opened; others need approval.
@@ -559,6 +595,8 @@ async function respond(userMsg, sourceTab, { retried = false } = {}) {
   let frame = 0;
   const paint = () => {
     frame = 0;
+    stopThinking?.();
+    stopThinking = null;
     fillBody(body, msg);
     scrollDown();
   };
@@ -567,6 +605,7 @@ async function respond(userMsg, sourceTab, { retried = false } = {}) {
   let stopped = false;
   const finish = async (error) => {
     if (state.pending?.msg !== msg) return; // already finished (e.g. stopped)
+    stopThinking?.();
     state.pending = null;
     setBusy(false);
     // A CLI session that can't be resumed (deleted, expired): replay the chat once.
@@ -669,6 +708,7 @@ function setBusy(busy) {
   els.send.classList.toggle("stop", busy);
   els.send.textContent = busy ? "■" : "↑";
   els.send.title = busy ? "Stop" : "Send";
+  motion.busy(els.send, busy);
 }
 
 function scrollDown() {
@@ -688,6 +728,7 @@ let toastTimer = 0;
 function toast(text) {
   els.toast.textContent = text;
   els.toast.hidden = false;
+  motion.toastIn(els.toast);
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (els.toast.hidden = true), 2600);
 }
@@ -716,8 +757,14 @@ chrome.tabs.onUpdated.addListener(async (tabId, info) => {
   if (info.status === "complete" && state.view === "media" && tabId === (await ctx.activeTab())?.id) renderMedia(mediaDeps(), { keepSelection: true });
 });
 
+let chipCount = 0;
 function renderChips() {
   els.chips.querySelectorAll(".chip.extra").forEach((c) => c.remove());
+  queueMicrotask(() => {
+    const chips = els.chips.querySelectorAll(".chip.extra");
+    if (chips.length > chipCount) motion.popIn(chips[chips.length - 1], { from: 4, scale: 0.8 });
+    chipCount = chips.length;
+  });
   const add = (text, title, onRemove) => {
     const c = document.createElement("span");
     c.className = "chip extra";
@@ -873,6 +920,7 @@ els.input.addEventListener("keydown", (e) => {
 
 els.composer.addEventListener("submit", (e) => {
   e.preventDefault();
+  motion.press(els.send);
   if (state.pending) return stop();
   const q = els.input.value.trim();
   els.input.value = "";
@@ -1021,6 +1069,9 @@ chrome.storage.session.onChanged.addListener((changes) => {
 // ---------- start ----------
 
 host.connect();
+motion.intro();
+// A small squash on every icon button: tactile feedback.
+document.querySelectorAll("button.icon").forEach((b) => b.addEventListener("pointerdown", () => motion.press(b)));
 refreshPageChip();
 renderAll();
 runPendingAction();

@@ -1,18 +1,20 @@
-# BYO Sidebar
+# Lumen
 
-Bring your own AI to your browser's sidebar. A Chromium extension (built for people who are done with Dia's built-in chat, but works in Chrome, Arc, Brave and Edge too) that gives you a chat panel where **you** pick the model, and signs in with an API key **or your existing login**.
+*Formerly BYO Sidebar.* Bring your own AI to your browser's sidebar. A Chromium extension (built for people who are done with Dia's built-in chat, but works in Chrome, Arc, Brave and Edge too) that gives you a chat panel where **you** pick the model, and signs in with an API key **or your existing login**.
 
 - **Chat about your tabs:** the current page and highlighted text go along automatically (click the tab chip to leave it out). Type `@` to add other tabs or a whole tab group. PDFs open in a tab are sent as PDFs.
 - **Skills:** pick one from the ⚡ menu next to the model (click runs it, ✎ lets you add details first), or type `/`. Saved prompts (Summarize, Explain, Copy edit, Reply, Translate, Compare tabs, Action items, Timestamps, ELI5, Fact check), or write your own with `{tab}`, `{selection}`, `{tabs}` and `{input}` placeholders.
 - **Attachments:** upload or paste images, PDFs and text files, screenshot the tab, or attach a recent download.
-- **Save media:** ⚡ → Actions → *Save images & videos* shows every image (at its largest size), video and audio file the page uses, biggest first, with dimensions and file size (the Download button shows the total). Select and download them to `Downloads/BYO Sidebar/<site>/`, or attach images to the chat. Streamed video (YouTube and most video sites) has no file to save, so it isn't offered.
+- **Save media:** ⚡ → Actions → *Save images & videos* shows every image (at its largest size), video and audio file the page uses, biggest first, with dimensions and file size (the Download button shows the total). Select and download them to `Downloads/Lumen/<site>/`, or attach images to the chat. Streamed video (YouTube and most video sites) has no file to save, so it isn't offered.
 - **Clickable timestamps:** times in answers (`3:55`, `1:02:03`) jump the video or audio in the tab you asked about, like YouTube comment timestamps.
 - **Saved chats:** every chat is kept locally and searchable. Edit a question or regenerate an answer, and switch models mid-chat.
 - **Read-only browsing:** when it needs more to answer, the chat can list and read your tabs, open links in a background tab (closed afterwards) and load more YouTube comments. It never clicks, types or submits. Links that haven't appeared in the chat or in pages it read ask you first, so a page can't trick it into sending your data somewhere. Works with Claude Code and API-key models; turn it off in ⓘ → Models & keys.
-- **Right-click and address bar:** select text → right-click → BYO Sidebar to explain, translate or copy-edit it, or ask about an image. Type `ai` + space in the address bar to ask from there.
+- **Right-click and address bar:** select text → right-click → Lumen to explain, translate or copy-edit it, or ask about an image. Type `ai` + space in the address bar to ask from there.
 - **Voice input** where the browser supports speech recognition.
 - **Media strip:** an Arc-style mini player for every tab with audio or video (play/pause, next/previous or ±10s, seek, mute, jump to tab), in two columns when there's more than one. Minimize it to small tabs and click one to open just that player; ✕ pauses and hides a player. Next/previous use the site's own buttons on YouTube, YouTube Music, Spotify and SoundCloud.
 - **No API key needed for Claude:** it can use your signed-in [Claude Code](https://claude.com/claude-code) CLI, with all tools disabled.
+- **Extensions manager:** the puzzle button lists every extension installed in the browser, with on/off switches, options, details and remove (always through the browser's own confirmation).
+- **Motion:** springy, staggered animations by [anime.js](https://animejs.com) (v4.5, MIT, bundled in `extension/vendor/`). They turn off when your system asks for reduced motion.
 - Everything runs on your machine; questions go only to the model provider you pick.
 
 **Timestamps for any YouTube video**, even without chapters or timestamped comments. When the page has none, the chat fetches a timestamped transcript through the local router:
@@ -20,7 +22,7 @@ Bring your own AI to your browser's sidebar. A Chromium extension (built for peo
 2. otherwise it downloads the audio and transcribes it on your Mac with [Parakeet](https://github.com/senstella/parakeet-mlx) (English and European languages, about a minute per hour of audio) or [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (any language, a few minutes per hour);
 3. with a Gemini API key it can also have Gemini watch the video, which hears music too and helps with DJ sets.
 
-Transcripts are cached in `~/Library/Caches/byo-sidebar/transcripts`. To enable it:
+Transcripts are cached in `~/Library/Caches/lumen/transcripts`. To enable it:
 
 ```bash
 brew install yt-dlp ffmpeg whisper.cpp
@@ -28,7 +30,7 @@ uv tool install parakeet-mlx   # optional, faster for English and European audio
 ./host/install.sh
 ```
 
-The first local transcription downloads a model: about 1.6 GB for whisper.cpp (set `BYO_WHISPER_MODEL=ggml-small.bin` before `install.sh` for a smaller one), or 2.5 GB for Parakeet.
+The first local transcription downloads a model: about 1.6 GB for whisper.cpp (set `LUMEN_WHISPER_MODEL=ggml-small.bin` before `install.sh` for a smaller one), or 2.5 GB for Parakeet.
 
 On YouTube the sidebar reads the full description and the top ~40 comments (untruncated) straight from YouTube's data, so nothing needs expanding or scrolling. For the spoken words too, open **Show transcript** under the video: YouTube blocks extensions from fetching captions directly. On other sites, text folded behind "read more" or closed sections is included as well.
 
@@ -43,7 +45,7 @@ On YouTube the sidebar reads the full description and the top ~40 comments (untr
 | Gemini | [Gemini CLI](https://github.com/google-gemini/gemini-cli): `npm i -g @google/gemini-cli`, then run `gemini` and sign in with Google | Gemini key |
 | DeepSeek | n/a (no official CLI) | DeepSeek key |
 
-Add API keys from the panel's **ⓘ → Models & keys** section. They're saved to `~/.config/byo-sidebar/config.json` (readable only by you) and never stored in the extension. Model lists for API providers come live from each provider, so new models show up on their own.
+Add API keys from the panel's **ⓘ → Models & keys** section. They're saved to `~/.config/lumen/config.json` (readable only by you) and never stored in the extension. Model lists for API providers come live from each provider, so new models show up on their own.
 
 Login mode notes:
 - Every CLI runs in an empty folder with tools off or read-only, and without your CLI config, so it only chats.
@@ -63,12 +65,14 @@ Requires Node.js 18+. Set up at least one login CLI or API key from the table ab
 2. Open `dia://extensions` (or `chrome://extensions`), turn on **Developer mode**, click **Load unpacked**, and pick the `extension/` folder.
 3. Click the extension's toolbar icon, or set a shortcut in `dia://extensions/shortcuts`.
 
-   **Dia users:** to have ⌘E open this instead of Dia's chat, first move Dia's own shortcuts in Dia → Settings → Shortcuts. Change **Chat…** (⌘E) and **New Chat** (⇧⌘E) to something else, then give BYO Sidebar ⌘E.
+   **Dia users:** to have ⌘E open this instead of Dia's chat, first move Dia's own shortcuts in Dia → Settings → Shortcuts. Change **Chat…** (⌘E) and **New Chat** (⇧⌘E) to something else, then give Lumen ⌘E.
 
 Test the router without the browser: `node host/test-host.js "hello" claude-cli haiku` (any provider id and model; it also checks that a follow-up remembers the first message).
 Remove it with `./host/uninstall.sh`.
 
-The installer copies the router to `~/Library/Application Support/byo-sidebar/host`, because macOS stops browsers from launching programs inside `~/Documents`, `~/Desktop` or `~/Downloads`. Re-run it after pulling updates. If the panel says it can't reach the router, check `~/Library/Logs/byo-sidebar/host.log`.
+Upgrading from BYO Sidebar: just re-run `./host/install.sh`. It moves your keys, caches and models to the new `lumen` folders and removes the old router registration. Saved chats carry over automatically.
+
+The installer copies the router to `~/Library/Application Support/lumen/host`, because macOS stops browsers from launching programs inside `~/Documents`, `~/Desktop` or `~/Downloads`. Re-run it after pulling updates. If the panel says it can't reach the router, check `~/Library/Logs/lumen/host.log`.
 
 ## How it works
 

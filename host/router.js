@@ -74,7 +74,7 @@ function runTool(requestId, name, input) {
 
 // CLIs reach the tools through a small MCP server (providers/mcp-browse.js) that they
 // spawn; it connects back here over a Unix socket, one JSON object per line.
-const BRIDGE = path.join(os.tmpdir(), `byo-sidebar-${process.pid}.sock`);
+const BRIDGE = path.join(os.tmpdir(), `lumen-${process.pid}.sock`);
 try {
   fs.rmSync(BRIDGE, { force: true });
 } catch {}
@@ -101,7 +101,7 @@ net
     sock.on("error", () => {});
   })
   .listen(BRIDGE, () => fs.chmodSync(BRIDGE, 0o600));
-process.env.BYO_BRIDGE = BRIDGE;
+process.env.LUMEN_BRIDGE = BRIDGE;
 process.on("exit", () => fs.rmSync(BRIDGE, { force: true }));
 
 async function handle(msg) {

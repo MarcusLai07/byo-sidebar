@@ -161,7 +161,7 @@ function fileName(m, i) {
   const ext = m.url.startsWith("data:image/") ? m.url.slice(11, m.url.indexOf(";")) : "";
   if (!name) name = `${m.type}-${i + 1}${ext ? `.${ext.replace("jpeg", "jpg")}` : ""}`;
   else if (!/\.\w{2,4}$/.test(name)) name += m.type === "image" ? ".jpg" : m.type === "audio" ? ".mp3" : ".mp4";
-  return `BYO Sidebar/${host}/${name}`;
+  return `Lumen/${host}/${name}`;
 }
 
 const label = (m) =>
@@ -274,10 +274,10 @@ els.download.addEventListener("click", async () => {
       await chrome.downloads.download({ url: m.url, filename: fileName(m, i), conflictAction: "uniquify" });
       ok++;
     } catch (e) {
-      console.warn("BYO Sidebar: download failed", m.url, e);
+      console.warn("Lumen: download failed", m.url, e);
     }
   }
-  deps.toast?.(ok === picks.length ? `Saved ${ok} to Downloads/BYO Sidebar` : `Saved ${ok} of ${picks.length}; some couldn't be downloaded`);
+  deps.toast?.(ok === picks.length ? `Saved ${ok} to Downloads/Lumen` : `Saved ${ok} of ${picks.length}; some couldn't be downloaded`);
 });
 
 els.attach.addEventListener("click", async () => {

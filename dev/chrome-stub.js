@@ -105,6 +105,7 @@
       connectNative: () => fakePort(),
       getManifest: () => ({ version: "0.2.0-harness" }),
       getURL: (p) => `/extension/${p}`,
+      id: "fndhgaclkabpgpmigidbibafjaijeglj",
       lastError: null,
     },
     storage: { local: store("local"), session },
@@ -135,6 +136,24 @@
       onUpdated: listeners(),
       onRemoved: listeners(),
     },
+    management: (() => {
+      const icon = `${location.origin}/extension/icons/icon-48.png`;
+      const exts = [
+        { id: "fndhgaclkabpgpmigidbibafjaijeglj", name: "Lumen", version: "0.3.0", enabled: true, mayDisable: true, installType: "development", type: "extension", icons: [{ size: 48, url: icon }] },
+        { id: "nordpass", name: "NordPass® Password Manager", version: "7.11.9", enabled: true, mayDisable: true, installType: "normal", type: "extension", optionsUrl: "https://example.com/options", icons: [] },
+        { id: "ublock", name: "uBlock Origin Lite", version: "2026.1021", enabled: false, mayDisable: true, installType: "normal", type: "extension", icons: [] },
+      ];
+      return {
+        getAll: async () => exts.map((e) => ({ ...e })),
+        setEnabled: async (id, on) => {
+          exts.find((e) => e.id === id).enabled = on;
+          setTimeout(() => window.chrome.management[on ? "onEnabled" : "onDisabled"].fire({ id }), 10);
+          window.__enabledCalls = (window.__enabledCalls || []).concat([[id, on]]);
+        },
+        uninstall: async (id) => (window.__uninstall = id),
+        onInstalled: listeners(), onUninstalled: listeners(), onEnabled: listeners(), onDisabled: listeners(),
+      };
+    })(),
     tabGroups: { query: async () => [{ id: 9, title: "Research", windowId: 1 }] },
     windows: { update: async () => {}, WINDOW_ID_CURRENT: -2 },
     scripting: {

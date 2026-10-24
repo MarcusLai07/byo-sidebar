@@ -7,7 +7,7 @@ const os = require("os");
 const path = require("path");
 
 // An empty working directory, so no project instructions or settings get picked up.
-const CWD = path.join(os.tmpdir(), "byo-sidebar");
+const CWD = path.join(os.tmpdir(), "lumen");
 fs.mkdirSync(CWD, { recursive: true });
 
 function exists(bin, args = ["--version"]) {

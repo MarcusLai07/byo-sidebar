@@ -8,7 +8,7 @@ const { exists, runJsonl } = require("./cli");
 const { SYSTEM_PROMPT } = require("./prompt");
 const { withTranscript } = require("./http");
 
-const BIN = process.env.BYO_GEMINI_BIN || "gemini";
+const BIN = process.env.LUMEN_GEMINI_BIN || "gemini";
 
 module.exports = {
   id: "gemini-cli",

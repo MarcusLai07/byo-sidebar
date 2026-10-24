@@ -8,7 +8,7 @@ const { CWD, exists, output, runJsonl } = require("./cli");
 const { withTranscript } = require("./http");
 const { SYSTEM_PROMPT } = require("./prompt");
 
-const BIN = process.env.BYO_CODEX_BIN || "codex";
+const BIN = process.env.LUMEN_CODEX_BIN || "codex";
 
 module.exports = {
   id: "codex-cli",

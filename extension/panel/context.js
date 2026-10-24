@@ -148,7 +148,7 @@ export async function fetchAttachment(url, name) {
   if (!/^https?:|^file:/.test(url)) throw new Error("Only web and file URLs can be attached.");
   const res = await fetch(url, { credentials: "include" }).catch(() => {
     throw new Error(url.startsWith("file:")
-      ? "Can't read local files: turn on “Allow access to file URLs” for BYO Sidebar in the extensions page."
+      ? "Can't read local files: turn on “Allow access to file URLs” for Lumen in the extensions page."
       : "Couldn't download it.");
   });
   if (!res.ok) throw new Error(`Couldn't download it (${res.status}).`);
