@@ -18,6 +18,9 @@ import { INSTANT } from "./instant.js";
 const $ = (id) => document.getElementById(id);
 const els = {
   skillsBtn: $("skills-btn"),
+  modelBtn: $("model-btn"),
+  modelMenu: $("model-menu"),
+  modelLabel: $("model-label"),
   skillsMenu: $("skills-menu"),
   mediaView: $("media-view"),
   extView: $("extensions-view"),
@@ -97,6 +100,13 @@ function fillModels() {
     els.model.append(group);
   }
   if (wanted && [...els.model.options].some((o) => o.value === wanted)) els.model.value = wanted;
+  updateModelLabel();
+}
+
+function updateModelLabel() {
+  const opt = els.model.selectedOptions[0];
+  els.modelLabel.textContent = opt && !opt.disabled ? opt.textContent : state.providers.length ? "Pick a model" : "No models connected";
+  els.modelBtn.title = opt ? `${opt.parentElement?.label || ""} · ${opt.textContent}` : "Model";
 }
 
 function currentModel() {
@@ -107,7 +117,98 @@ function currentModel() {
 
 const isLogin = (providerId) => state.logins.some((l) => l.id === providerId);
 
-els.model.addEventListener("change", () => localStorage.setItem("model", els.model.value));
+els.model.addEventListener("change", () => {
+  localStorage.setItem("model", els.model.value);
+  updateModelLabel();
+});
+
+// ---------- model menu (Lumen's own, instead of the native select popup) ----------
+
+function openModelMenu() {
+  closeSkillsMenu();
+  const groups = [...els.model.querySelectorAll("optgroup")];
+  const nodes = [];
+  for (const g of groups) {
+    nodes.push(Object.assign(document.createElement("div"), { className: "menu-heading", textContent: g.label }));
+    for (const o of g.querySelectorAll("option")) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `item${o.disabled ? " err" : ""}`;
+      b.setAttribute("role", "option");
+      b.setAttribute("aria-selected", String(o.selected && !o.disabled));
+      b.dataset.value = o.value;
+      const label = document.createElement("span");
+      label.append(Object.assign(document.createElement(o.disabled ? "small" : "strong"), { textContent: o.textContent }));
+      b.append(label, Object.assign(document.createElement("span"), { className: "check", textContent: "✓" }));
+      if (!o.disabled) b.addEventListener("click", () => chooseModel(o.value));
+      nodes.push(b);
+    }
+  }
+  if (!nodes.length) {
+    nodes.push(Object.assign(document.createElement("p"), { className: "hint", textContent: "No models connected yet. Open ⓘ to connect a login or add an API key." }));
+  }
+  els.modelMenu.replaceChildren(...nodes);
+  const r = els.modelBtn.getBoundingClientRect();
+  els.modelMenu.style.top = `${r.bottom + 8}px`;
+  els.modelMenu.style.left = `${Math.max(8, r.left)}px`;
+  els.modelMenu.style.minWidth = `${Math.max(240, r.width)}px`;
+  els.modelMenu.classList.add("open");
+  els.modelBtn.setAttribute("aria-expanded", "true");
+  motion.menuIn(els.modelMenu);
+  els.modelMenu.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+}
+
+let closingModel = false;
+async function closeModelMenu() {
+  if (!els.modelMenu.classList.contains("open") || closingModel) return;
+  closingModel = true;
+  els.modelBtn.setAttribute("aria-expanded", "false");
+  await motion.menuOut(els.modelMenu);
+  els.modelMenu.classList.remove("open");
+  els.modelMenu.querySelectorAll("*").forEach(motion.reset);
+  motion.reset(els.modelMenu);
+  closingModel = false;
+}
+
+function chooseModel(value) {
+  if (els.model.value !== value) {
+    els.model.value = value;
+    els.model.dispatchEvent(new Event("change"));
+  }
+  closeModelMenu();
+  els.modelBtn.focus();
+}
+
+els.modelBtn.addEventListener("click", () => (els.modelMenu.classList.contains("open") ? closeModelMenu() : openModelMenu()));
+els.modelBtn.addEventListener("keydown", (e) => {
+  if (["ArrowDown", "ArrowUp"].includes(e.key) && !els.modelMenu.classList.contains("open")) {
+    e.preventDefault();
+    openModelMenu();
+  }
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#model-btn, #model-menu")) closeModelMenu();
+});
+// Arrow keys move through models, Enter picks, Escape closes.
+document.addEventListener("keydown", (e) => {
+  if (!els.modelMenu.classList.contains("open")) return;
+  const items = [...els.modelMenu.querySelectorAll(".item:not(.err)")];
+  if (!items.length) return;
+  let i = items.findIndex((b) => b.classList.contains("kbd"));
+  if (i < 0) i = items.findIndex((b) => b.getAttribute("aria-selected") === "true");
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    i = (i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+    items.forEach((b, j) => b.classList.toggle("kbd", j === i));
+    items[i].scrollIntoView({ block: "nearest" });
+  } else if (e.key === "Enter" && i >= 0) {
+    e.preventDefault();
+    chooseModel(items[i].dataset.value);
+  } else if (e.key === "Escape") {
+    closeModelMenu();
+    els.modelBtn.focus();
+  }
+});
 
 // ---------- views ----------
 
@@ -387,6 +488,7 @@ async function runInstant(action) {
 // ---------- skills dropdown (⚡ next to the model) ----------
 
 async function openSkillsMenu() {
+  closeModelMenu();
   const list = await skills.allSkills();
   const item = (s) => {
     const b = document.createElement("button");

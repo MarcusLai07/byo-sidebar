@@ -119,14 +119,7 @@ header {
   box-shadow: var(--glass-shadow), var(--glass-highlight);
 }
 
-#model {
-  height: 32px;
-  padding: 0 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  font-weight: 500;
-}
+.model-btn { box-shadow: var(--glass-highlight); }
 
 button.icon {
   width: 32px;

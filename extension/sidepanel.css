@@ -1077,11 +1077,37 @@ button.refresh.spinning { animation: spin 0.6s linear infinite; }
 /* Shared spring for arrow motion: a quick move with a slight overshoot. */
 :root { --spring: cubic-bezier(0.34, 1.56, 0.64, 1); }
 
-.select-wrap { position: relative; display: flex; flex: 1; min-width: 0; }
-.select-wrap #model { flex: 1; padding-right: 30px; appearance: none; -webkit-appearance: none; cursor: pointer; }
-.select-wrap .chev { position: absolute; right: 11px; top: 50%; translate: 0 -50%; pointer-events: none; }
-.select-wrap:focus-within .chev { transform: rotate(180deg); stroke: var(--accent); }
-.select-wrap:hover .chev { stroke: var(--fg); }
+/* Model picker: Lumen's own button and menu (a native <select> menu can't be styled). */
+.model-btn {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  height: 32px;
+  padding: 0 11px 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.model-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-btn:hover { background: var(--hover); }
+.model-btn:hover .chev { stroke: var(--fg); }
+.model-btn[aria-expanded="true"] .chev { transform: rotate(180deg); stroke: var(--accent); }
+.model-btn[aria-expanded="true"] { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+
+.model-menu { width: auto; min-width: 240px; }
+.model-menu .item { justify-content: space-between; }
+.model-menu .item .check { width: 16px; color: var(--accent); font-weight: 600; text-align: center; opacity: 0; }
+.model-menu .item[aria-selected="true"] .check { opacity: 1; }
+.model-menu .item[aria-selected="true"] strong { color: var(--accent); }
+.model-menu .item:focus-visible, .model-menu .item.kbd { background: var(--hover); outline: none; }
+.model-menu .item.err { cursor: default; opacity: 0.7; }
+.model-menu .item.err small { white-space: normal; color: var(--error); }
 
 .media-toggle { display: grid; place-items: center; }
 .media-toggle.flipped .chev { transform: rotate(180deg); }
