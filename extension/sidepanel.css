@@ -1172,3 +1172,60 @@ button:hover .ne { transform: translate(2px, -2px); }
 .menu-tab[aria-selected="true"] { color: var(--fg); }
 .menu-note { margin: 2px 10px 4px; color: var(--muted); font-size: 10.5px; }
 .menu-pane { min-height: 120px; }
+
+/* ---------- skills: reorder, edit, delete ---------- */
+
+.skill-list .skill {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: start;
+  padding: 8px 4px;
+  border-radius: 12px;
+  background: transparent;
+}
+
+.skill .skill-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.skill .skill-name { display: flex; gap: 6px; align-items: center; }
+.skill .skill-info small { white-space: normal; }
+.skill .row-actions { opacity: 0; transition: opacity 0.15s; }
+.skill:hover .row-actions, .skill:focus-within .row-actions { opacity: 1; }
+
+.grip {
+  padding: 2px 4px;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: grab;
+  font-size: 12px;
+  letter-spacing: -2px;
+  touch-action: none;
+}
+
+.grip:hover, .grip:focus-visible { background: var(--hover); color: var(--fg); outline: none; }
+
+/* The row being dragged lifts above the rest; the others glide aside. */
+.skill.dragging {
+  position: relative;
+  z-index: 5;
+  background: var(--glass-menu, var(--bg));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), inset 0 0 0 1px var(--glass-edge, var(--border));
+  cursor: grabbing;
+}
+
+.skill.dragging .grip { cursor: grabbing; }
+.skill.shifting { transition: transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1); }
+
+.row-actions button.danger { border-color: var(--error); color: var(--error); }
+.skill-form.inline { grid-column: 1 / -1; width: 100%; }
+.skill-form.inline .row-actions { align-self: flex-end; opacity: 1; }
+
+.skill-restore button.link {
+  margin: 4px 0 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font-size: 12px;
+}

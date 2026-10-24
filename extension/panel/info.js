@@ -3,6 +3,7 @@
 import * as skills from "./skills.js";
 import * as ctx from "./context.js";
 import * as motion from "./motion.js";
+import { makeSortable } from "./sortable.js";
 
 const KEY_PROVIDERS = [
   { name: "anthropic", label: "Anthropic", placeholder: "sk-ant-…", url: "https://console.anthropic.com/settings/keys" },
@@ -134,60 +135,98 @@ function browseToggle() {
 
 // ---------- skills ----------
 
-function skillsSection(container, deps) {
+function skillsSection() {
   const list = el("div", { class: "skill-list" });
+  const restore = el("div", { class: "skill-restore" });
   const name = el("input", { placeholder: "Name, e.g. Tweet thread", maxlength: "40" });
   const prompt = el("textarea", { rows: "3", placeholder: "Prompt. Use {tab}, {selection}, {tabs} and {input}." });
-  let editing = null;
-
   const form = el(
     "form",
     { class: "skill-form", onsubmit: async (e) => {
       e.preventDefault();
       if (!name.value.trim() || !prompt.value.trim()) return;
-      await skills.saveSkill({ id: editing, name: name.value.trim(), prompt: prompt.value.trim() });
-      editing = null;
+      await skills.saveSkill({ name: name.value.trim(), prompt: prompt.value.trim() });
       name.value = prompt.value = "";
-      submit.textContent = "Add skill";
-      draw();
+      await draw();
+      motion.popIn(list.lastElementChild, { from: 6 });
     } },
     name,
     prompt,
+    el("button", { class: "primary" }, "Add skill")
   );
-  const submit = el("button", { class: "primary" }, "Add skill");
-  form.append(submit);
+
+  // Drag the ⋮⋮ grip (or focus it and press ↑/↓) to reorder; the ⚡ and / menus follow.
+  makeSortable(list, { itemSel: ".skill", handleSel: ".grip", onChange: (ids) => skills.saveOrder(ids) });
+
+  // Edit in place: the row turns into a small form.
+  function editRow(row, s) {
+    const n = el("input", { value: s.name, maxlength: "40" });
+    const p = el("textarea", { rows: "4" });
+    p.value = s.prompt;
+    const done = () => draw();
+    const f = el(
+      "form",
+      { class: "skill-form inline", onsubmit: async (e) => {
+        e.preventDefault();
+        if (!n.value.trim() || !p.value.trim()) return;
+        await skills.saveSkill({ ...s, name: n.value.trim(), prompt: p.value.trim() });
+        done();
+      } },
+      n,
+      p,
+      el("div", { class: "row-actions" }, el("button", { type: "button", onclick: done }, "Cancel"), el("button", { class: "primary" }, "Save"))
+    );
+    row.replaceChildren(f);
+    motion.popIn(f, { from: 4, scale: 0.98 });
+    n.focus();
+  }
+
+  function row(s) {
+    const r = el("div", { class: "skill", "data-id": s.id });
+    const grip = el("button", { class: "grip", type: "button", title: "Drag to reorder (or focus and press ↑/↓)", "aria-label": `Move ${s.name}` }, "⋮⋮");
+    const tags = [s.custom ? el("span", { class: "tag" }, "yours") : null, s.edited ? el("span", { class: "tag" }, "edited") : null];
+    const info = el("div", { class: "skill-info" }, el("div", { class: "skill-name" }, el("strong", {}, `/${skills.slug(s.name)}`), ...tags), el("small", {}, s.prompt));
+    let armed = 0;
+    const del = el("button", { title: s.builtin ? "Hide this built-in skill (you can restore it)" : "Delete this skill" }, "Delete");
+    del.addEventListener("click", async () => {
+      if (!armed) {
+        // First click arms it; a second within 3 seconds deletes.
+        del.textContent = "Delete?";
+        del.classList.add("danger");
+        armed = setTimeout(() => {
+          armed = 0;
+          del.textContent = "Delete";
+          del.classList.remove("danger");
+        }, 3000);
+        return;
+      }
+      clearTimeout(armed);
+      await motion.leave(r, { x: -12, y: 0, scale: 0.97, duration: 180 });
+      await skills.deleteSkill(s.id);
+      draw();
+    });
+    const actions = el(
+      "div",
+      { class: "row-actions" },
+      s.edited ? el("button", { title: "Back to the original", onclick: async () => (await skills.resetSkill(s.id), draw()) }, "Reset") : null,
+      el("button", { onclick: () => editRow(r, s) }, "Edit"),
+      del
+    );
+    r.append(grip, info, actions);
+    return r;
+  }
 
   async function draw() {
-    const all = await skills.allSkills();
-    list.replaceChildren(
-      ...all.map((s) =>
-        el(
-          "div",
-          { class: "skill" },
-          el("div", {}, el("strong", {}, `/${skills.slug(s.name)}`), s.custom ? el("span", { class: "tag" }, "yours") : null, el("small", {}, s.prompt)),
-          s.custom
-            ? el(
-                "div",
-                { class: "row-actions" },
-                el("button", { onclick: () => {
-                  editing = s.id;
-                  name.value = s.name;
-                  prompt.value = s.prompt;
-                  submit.textContent = "Save skill";
-                  name.focus();
-                } }, "Edit"),
-                el("button", { onclick: async () => {
-                  await skills.deleteSkill(s.id);
-                  draw();
-                } }, "Delete")
-              )
-            : null
-        )
-      )
+    const [all, hidden] = await Promise.all([skills.allSkills(), skills.hiddenBuiltins()]);
+    list.replaceChildren(...all.map(row));
+    restore.replaceChildren(
+      ...(hidden.length
+        ? [el("button", { class: "link", onclick: async () => (await skills.restoreBuiltins(), draw()) }, `Restore ${hidden.length} hidden built-in skill${hidden.length === 1 ? "" : "s"}`)]
+        : [])
     );
   }
   draw();
-  return [list, el("p", { class: "hint" }, "New skill"), form];
+  return [el("p", { class: "hint" }, "Drag ⋮⋮ to reorder; the ⚡ menu and / follow this order."), list, restore, el("p", { class: "hint" }, "New skill"), form];
 }
 
 // ---------- downloads ----------
@@ -259,7 +298,7 @@ export function renderInfo(container, deps) {
       browseToggle(),
       el("h3", {}, "API keys"), ...keysSection(deps),
       el("h3", {}, "Login providers"), ...loginsSection(deps)),
-    section("skills", "Skills", ...skillsSection(container, deps)),
+    section("skills", "Skills", ...skillsSection()),
     section("downloads", "PDFs & downloads", ...downloadsSection(deps)),
     section("guide", "Features & guide",
       el("dl", { class: "guide" }, ...GUIDE.flatMap(([t, d]) => [el("dt", {}, t), el("dd", {}, d)]))),

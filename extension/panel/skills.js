@@ -23,11 +23,43 @@ export async function customSkills() {
   return list;
 }
 
+const ORDER = "skillOrder";
+
+// Skills in the order you arranged them (ⓘ → Skills, drag the ⋮⋮ grips). Skills not
+// in the saved order (new ones) go at the end, built-ins first.
+// Built-ins can be edited (your version is kept in OVERRIDES, with Reset to undo) or
+// hidden (Delete; restorable). Your own skills are edited and deleted directly.
+const OVERRIDES = "skillOverrides";
+const HIDDEN = "hiddenSkills";
+
+export async function hiddenBuiltins() {
+  const { [HIDDEN]: hidden = [] } = await chrome.storage.local.get(HIDDEN);
+  return BUILTIN.filter((s) => hidden.includes(s.id));
+}
+
 export async function allSkills() {
-  return [...BUILTIN, ...(await customSkills())];
+  const { [OVERRIDES]: overrides = {}, [HIDDEN]: hidden = [], [ORDER]: order = [] } = await chrome.storage.local.get([OVERRIDES, HIDDEN, ORDER]);
+  const builtins = BUILTIN.filter((s) => !hidden.includes(s.id)).map((s) =>
+    overrides[s.id] ? { ...s, ...overrides[s.id], builtin: true, edited: true } : { ...s, builtin: true }
+  );
+  const list = [...builtins, ...(await customSkills())];
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return list
+    .map((s, i) => ({ s, i }))
+    .sort((a, b) => (rank.get(a.s.id) ?? 1e6 + a.i) - (rank.get(b.s.id) ?? 1e6 + b.i))
+    .map(({ s }) => s);
+}
+
+export async function saveOrder(ids) {
+  await chrome.storage.local.set({ [ORDER]: ids });
 }
 
 export async function saveSkill(skill) {
+  if (BUILTIN.some((b) => b.id === skill.id)) {
+    const { [OVERRIDES]: overrides = {} } = await chrome.storage.local.get(OVERRIDES);
+    await chrome.storage.local.set({ [OVERRIDES]: { ...overrides, [skill.id]: { name: skill.name, prompt: skill.prompt } } });
+    return skill.id;
+  }
   const list = await customSkills();
   const id = skill.id || `custom-${crypto.randomUUID().slice(0, 8)}`;
   const next = [...list.filter((s) => s.id !== id), { ...skill, id, custom: true }];
@@ -36,8 +68,24 @@ export async function saveSkill(skill) {
 }
 
 export async function deleteSkill(id) {
+  if (BUILTIN.some((b) => b.id === id)) {
+    const { [HIDDEN]: hidden = [] } = await chrome.storage.local.get(HIDDEN);
+    await chrome.storage.local.set({ [HIDDEN]: [...new Set([...hidden, id])] });
+    return;
+  }
   const list = await customSkills();
   await chrome.storage.local.set({ [KEY]: list.filter((s) => s.id !== id) });
+}
+
+// Undo your edits to a built-in skill.
+export async function resetSkill(id) {
+  const { [OVERRIDES]: overrides = {} } = await chrome.storage.local.get(OVERRIDES);
+  delete overrides[id];
+  await chrome.storage.local.set({ [OVERRIDES]: overrides });
+}
+
+export async function restoreBuiltins() {
+  await chrome.storage.local.set({ [HIDDEN]: [] });
 }
 
 export const slug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "");

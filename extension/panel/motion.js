@@ -143,6 +143,12 @@ export function paneIn(nodes, dir) {
   animate([...nodes], { opacity: [0, 1], translateX: [dir > 0 ? 14 : -14, 0], delay: stagger(18), duration: 280, ease: "out(3)" });
 }
 
+// A reordered row springs from where it was drawn (dy px away) into its slot.
+export function settle(el, dy) {
+  if (!on() || !dy) return;
+  animate(el, { translateY: [dy, 0], scale: [1.02, 1], ease: springy(0.3, 420) });
+}
+
 // ---------- exits: the reverse of each entrance, quick and eased out ----------
 
 // Animate something away; resolves when it's gone (immediately if motion is off).
