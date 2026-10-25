@@ -90,7 +90,7 @@ Installed a CLI after Lumen? Run the install line again so the router finds it.
 
 <br>
 
-- **Media strip:** a mini player for every tab playing audio or video: play, skip, seek, mute, jump to it.
+- **Media strip:** a mini player for every tab playing audio or video: play, skip, seek, mute, jump to it. Live streams (YouTube Live, Twitch, sports) get a **LIVE** tag; fall behind and **Go live** jumps back to now.
 - **Save images & videos** from a page at full size, into `Downloads/Lumen/<site>/`.
 - **Extensions manager** (🧩): every extension with on/off switches, options and remove.
 - **Attachments:** images, PDFs, text, a screenshot of the tab, or a recent download.

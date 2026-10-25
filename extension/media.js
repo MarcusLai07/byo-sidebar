@@ -15,7 +15,11 @@
     "soundcloud.com": { next: ".skipControl__next", prev: ".skipControl__previous", toggle: ".playControl" },
   };
 
-  function probe(adapters) {
+  // Further back than this from the newest moment of a live stream counts as "behind".
+  // Players normally sit a few segments (up to ~20s) behind the edge, so allow for that.
+  const LIVE_SLACK = 30;
+
+  function probe(adapters, slack) {
     const site = adapters[location.hostname] || {};
     // Present and enabled is enough: YouTube hides its next button in narrow players
     // with display:none, but clicking it still works.
@@ -38,11 +42,23 @@
     // Players without a media element: read paused state off their play button's label.
     const labelPaused = toggleEl ? /play/i.test(toggleEl.getAttribute("aria-label") || toggleEl.title || "") : null;
 
+    // Live: an endless stream (Twitch, beIN, most HLS) or a YouTube live player, whose
+    // "LIVE" badge is disabled while you're watching the live edge.
+    const ytLive = location.hostname.endsWith("youtube.com") && document.querySelector(".html5-video-player.ytp-live");
+    const live = !!media && (media.duration === Infinity || !!ytLive);
+    let behind = null;
+    if (live && media.seekable.length) behind = Math.max(0, media.seekable.end(media.seekable.length - 1) - media.currentTime);
+    const badge = ytLive && document.querySelector(".ytp-live-badge");
+    const atEdge = live && (badge ? badge.disabled || badge.hasAttribute("disabled") : behind == null || behind < slack);
+
     return {
       hasElement: !!media,
+      live,
+      atEdge,
+      behind,
       paused: media ? media.paused : labelPaused ?? navigator.mediaSession?.playbackState !== "playing",
       currentTime: media && isFinite(media.currentTime) ? media.currentTime : null,
-      duration: media && isFinite(media.duration) ? media.duration : null,
+      duration: media && isFinite(media.duration) && !live ? media.duration : null,
       title: meta?.title || null,
       artist: meta?.artist || null,
       artwork: art,
@@ -84,6 +100,14 @@
     }
     if (action === "seek" && media && isFinite(media.duration)) {
       media.currentTime = Math.max(0, Math.min(media.duration, value));
+      return true;
+    }
+    if (action === "live" && media) {
+      // YouTube's own badge also resets its playback speed and buffering for the edge.
+      const badge = document.querySelector(".html5-video-player.ytp-live .ytp-live-badge");
+      if (badge && !badge.disabled) badge.click();
+      else if (media.seekable.length) media.currentTime = Math.max(0, media.seekable.end(media.seekable.length - 1) - 2);
+      if (media.paused) media.play().catch(() => {});
       return true;
     }
     if (action === "skip" && media) {
@@ -142,7 +166,7 @@
     const tabs = await candidates();
     const players = await Promise.all(
       tabs.map(async (tab) => {
-        const frames = await run(tab.id, probe, [ADAPTERS]);
+        const frames = await run(tab.id, probe, [ADAPTERS, LIVE_SLACK]);
         const best = frames.sort((a, b) => b.value.score - a.value.score)[0];
         // Keep audible tabs even when nothing can be read (e.g. Web Audio), so they can still be muted.
         if (!best && !tab.audible) return null;
@@ -240,6 +264,7 @@
     sub.textContent = [state.artist || host, state.duration ? `${fmt(state.currentTime)} / ${fmt(state.duration)}` : ""]
       .filter(Boolean)
       .join(" · ");
+    if (state.live) sub.prepend(liveButton(p));
     info.append(title, sub);
 
     const controls = document.createElement("div");
@@ -274,12 +299,23 @@
     return el;
   }
 
+  // Live streams: a red LIVE tag while you're watching the newest moment; fall behind
+  // (paused, or skipped back) and it glows as GO LIVE, which jumps back to the edge.
+  function liveButton(p) {
+    const { atEdge, behind } = p.state;
+    const b = button("", atEdge ? "Watching live" : `${behind ? `${fmt(behind)} behind live. ` : ""}Jump to live`, () => act(p, "live"), atEdge);
+    b.className = `live-btn${atEdge ? " on" : " behind"}`;
+    b.append(Object.assign(document.createElement("span"), { className: "dot", ariaHidden: "true" }), atEdge ? "Live" : "Go live");
+    if (!atEdge && behind) b.append(Object.assign(document.createElement("small"), { textContent: `−${fmt(behind)}` }));
+    return b;
+  }
+
   // A minimized player: artwork, title and whether it's playing.
   function pill(p) {
     const { tab, state } = p;
     const b = document.createElement("button");
     b.type = "button";
-    b.className = `media-pill${focusId === tab.id ? " on" : ""}${state.paused ? "" : " playing"}`;
+    b.className = `media-pill${focusId === tab.id ? " on" : ""}${state.paused ? "" : " playing"}${state.live ? " live" : ""}`;
     b.dataset.tab = tab.id;
     b.title = state.title || tab.title || "";
     const art = document.createElement("img");

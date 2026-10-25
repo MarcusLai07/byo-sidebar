@@ -3,11 +3,13 @@
   --accent-fg: #ffffff;
   --ok: #34c759;
   --error: #c0392b;
+  --live: #e5484d;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --error: #ff6b5b;
+    --live: #ff5a5f;
   }
 }
 
@@ -354,6 +356,61 @@ main, .view {
 
 .player .controls button:hover:not(:disabled) { background: var(--border); }
 .player .controls button:disabled { opacity: 0.3; cursor: default; }
+
+/* LIVE tag on live streams (like Pit Wall's race-brief tab): steady red at the live
+   edge; when you've fallen behind, GO LIVE glows and a light beam sweeps across it. */
+.player .sub .live-btn {
+  position: relative;
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  margin-right: 6px;
+  padding: 1px 6px;
+  overflow: hidden;
+  vertical-align: 1px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--live);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 14px;
+}
+.live-btn .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.live-btn small { color: var(--muted); font-size: 10px; font-weight: 500; letter-spacing: 0; }
+.live-btn.on { cursor: default; }
+.live-btn.on .dot { animation: live-pulse 1.6s ease-in-out infinite; }
+.live-btn.behind {
+  border-color: color-mix(in srgb, var(--live) 35%, transparent);
+  animation: live-glow 2.6s ease-in-out infinite;
+}
+.live-btn.behind .dot { background: none; box-shadow: inset 0 0 0 1.5px currentColor; }
+.live-btn.behind:hover { background: color-mix(in srgb, var(--live) 14%, transparent); }
+.live-btn.behind::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(100deg, transparent, color-mix(in srgb, var(--live) 30%, transparent), transparent);
+  transform: translateX(-120%);
+  animation: live-sweep 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes live-pulse { 50% { opacity: 0.35; } }
+@keyframes live-glow {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 10px 1px color-mix(in srgb, var(--live) 40%, transparent); }
+}
+@keyframes live-sweep {
+  0% { transform: translateX(-120%); }
+  60%, 100% { transform: translateX(260%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-btn.on .dot, .live-btn.behind, .live-btn.behind::after { animation: none; }
+}
+.media-pill.live.playing img { box-shadow: 0 0 0 2px var(--live); }
 
 .player .progress {
   grid-column: 1 / -1;

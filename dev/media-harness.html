@@ -11,6 +11,19 @@
 w(0,"RIFF");v.setUint32(4,36+n*2,true);w(8,"WAVEfmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,"data");v.setUint32(40,n*2,true);
 for(let i=0;i<n;i++)v.setInt16(44+i*2,Math.sin(i/sr*2*Math.PI*220)*300,true);document.getElementById("a").src=URL.createObjectURL(new Blob([b],{type:"audio/wav"}));})();
 navigator.mediaSession.metadata=new MediaMetadata({title:"Harness Tone",artist:"Test Artist"});
+// ?live: pretend the tone is a live stream whose newest moment keeps moving 1s per second
+// (endless duration, a seekable window that ends at "now"). Starts 95s behind.
+if (location.search.includes("live")) {
+  const a=document.getElementById("a"),t0=performance.now()/1000;let pos=0,base=t0;
+  const edge=()=>100+performance.now()/1000-t0;
+  Object.defineProperty(a,"duration",{get:()=>Infinity});
+  Object.defineProperty(a,"seekable",{get:()=>({length:1,start:()=>0,end:()=>edge()})});
+  let running=false;const now=()=>performance.now()/1000;
+  Object.defineProperty(a,"currentTime",{get:()=>pos+(running?now()-base:0),set:(v)=>{pos=v;base=now();}});
+  a.addEventListener("playing",()=>{running=true;base=now();});
+  a.addEventListener("pause",()=>{pos+=now()-base;running=false;});
+  a.currentTime=5;
+}
 // ?two: two players (both read the same test tone).
 window.__mediaTabs = location.search.includes("discover") ? [] : location.search.includes("two") ? [1, 2] : [1];
 if (location.search.includes("discover")) document.getElementById("a").currentTime = 5;
