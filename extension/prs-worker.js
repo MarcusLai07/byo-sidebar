@@ -2,6 +2,8 @@
 // minutes the router asks GitHub (through your gh logins) for open PRs. The panel's
 // PR list reads the result from storage. New review requests can notify you and open
 // in a "PRs" tab group; tabs Lumen opened close again once their PR is merged or closed.
+// PRs that get merged or closed notify you too, and stay in the list (prDone) until
+// you mark them read.
 // Loaded into the background worker with importScripts.
 
 const PR_POLL_MINUTES = 3;
@@ -77,7 +79,7 @@ function pollPrs() {
 }
 
 async function doPoll() {
-  const { prState: old = {}, prSeen, prOpened = {} } = await chrome.storage.local.get(["prState", "prSeen", "prOpened"]);
+  const { prState: old = {}, prSeen, prOpened = {}, prDone = [] } = await chrome.storage.local.get(["prState", "prSeen", "prOpened", "prDone"]);
   let result;
   try {
     result = await github("prs");
@@ -107,12 +109,27 @@ async function doPoll() {
     for (const t of await openInGroup(fresh.map((i) => i.url))) prOpened[t.pendingUrl || t.url] = t.id;
   }
 
-  // Tabs Lumen opened: close them once their PR is merged or closed.
+  // PRs that left the lists since last time, and tabs Lumen opened for PRs no longer
+  // listed: were they merged or closed? (A review request also leaves once you review.)
   const open = new Set(result.items.map((i) => i.url));
-  const gone = Object.keys(prOpened).filter((u) => !open.has(u));
+  const left = (old.items || []).filter((i) => !open.has(i.url));
+  const gone = [...new Set([...left.map((i) => i.url), ...Object.keys(prOpened).filter((u) => !open.has(u))])];
+  const states = gone.length ? await github("states", { urls: gone }).catch(() => ({})) : {};
+  for (const pr of left) {
+    const state = states[pr.url];
+    if ((state !== "MERGED" && state !== "CLOSED") || prDone.some((d) => d.url === pr.url)) continue;
+    prDone.unshift({ ...pr, state, doneAt: Date.now() });
+    if (settings.notify) {
+      chrome.notifications.create(`pr:${pr.url}`, {
+        type: "basic",
+        iconUrl: "icons/icon-128.png",
+        title: `${state === "MERGED" ? "Merged" : "Closed"} · ${pr.repo}#${pr.number}`,
+        message: pr.title,
+      });
+    }
+  }
   if (gone.length) {
-    const states = await github("states", { urls: gone }).catch(() => ({}));
-    for (const url of gone) {
+    for (const url of Object.keys(prOpened).filter((u) => !open.has(u))) {
       const tab = await chrome.tabs.get(prOpened[url]).catch(() => null);
       if (!tab || prKey(tab.url) !== prKey(url)) delete prOpened[url]; // closed or navigated away: not ours anymore
       else if (states[url] === "MERGED" || states[url] === "CLOSED") {
@@ -126,9 +143,24 @@ async function doPoll() {
     prState: { ...result, error: null, checkedAt: Date.now() },
     prSeen: review.map((i) => i.url),
     prOpened,
+    prDone: prDone.slice(0, 30),
   });
-  chrome.action.setBadgeText({ text: review.length ? String(review.length) : "" });
+  updatePrBadge();
+}
+
+// The toolbar badge: open PRs plus merged/closed ones you haven't marked read.
+async function updatePrBadge() {
+  const { prState: s = {}, prDone = [] } = await chrome.storage.local.get(["prState", "prDone"]);
+  const n = (s.items || []).length + prDone.length;
+  chrome.action.setBadgeText({ text: n ? String(n) : "" });
   chrome.action.setBadgeBackgroundColor({ color: "#d97757" });
+}
+
+// Marks merged/closed PRs read, which removes them from the list.
+async function markPrsRead(urls) {
+  const { prDone = [] } = await chrome.storage.local.get("prDone");
+  await chrome.storage.local.set({ prDone: urls ? prDone.filter((d) => !urls.includes(d.url)) : [] });
+  await updatePrBadge();
 }
 
 function schedulePrs() {
@@ -142,6 +174,7 @@ chrome.notifications.onClicked.addListener((id) => {
   if (!id.startsWith("pr:")) return;
   chrome.notifications.clear(id);
   openPr(id.slice(3));
+  markPrsRead([id.slice(3)]);
 });
 
 // From the panel: { type: "prs:refresh" } checks now; { type: "prs:open", url } opens one.
@@ -153,6 +186,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
   }
   if (msg?.type === "prs:open") {
     openPr(msg.url).then(() => reply(true), () => reply(false));
+    return true;
+  }
+  // { type: "prs:read", urls } marks those merged/closed PRs read; without urls, all of them.
+  if (msg?.type === "prs:read") {
+    markPrsRead(msg.urls).then(() => reply(true), () => reply(false));
     return true;
   }
 });

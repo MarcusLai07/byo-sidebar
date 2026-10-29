@@ -12,7 +12,7 @@ import { renderInfo } from "./info.js";
 import { renderHistory } from "./history.js";
 import { renderMedia } from "./saver.js";
 import { renderExtensions } from "./extensions.js";
-import { renderPrs, reviewCount } from "./prs.js";
+import { renderPrs, counts as prCounts } from "./prs.js";
 import * as motion from "./motion.js";
 import { INSTANT } from "./instant.js";
 
@@ -293,14 +293,15 @@ els.infoBtn.addEventListener("click", () => showView("info"));
 els.extBtn.addEventListener("click", () => showView("extensions"));
 els.prsBtn.addEventListener("click", () => showView("prs"));
 
-// Review requests waiting, on the PR button.
+// On the PR button: open PRs plus merged/closed ones you haven't read.
 async function updatePrBadge() {
-  const n = await reviewCount();
+  const { open, done, review } = await prCounts();
+  const n = open + done;
   els.prsBadge.hidden = !n;
-  els.prsBadge.textContent = n > 9 ? "9+" : String(n);
-  els.prsBtn.title = n ? `Pull requests · ${n} waiting for your review` : "Pull requests";
+  els.prsBadge.textContent = n > 99 ? "99+" : String(n);
+  els.prsBtn.title = ["Pull requests", open && `${open} open`, review && `${review} waiting for your review`, done && `${done} merged or closed`].filter(Boolean).join(" · ");
 }
-chrome.storage.onChanged.addListener((changes, area) => area === "local" && changes.prState && updatePrBadge());
+chrome.storage.onChanged.addListener((changes, area) => area === "local" && (changes.prState || changes.prDone) && updatePrBadge());
 updatePrBadge();
 
 // ---------- chats ----------

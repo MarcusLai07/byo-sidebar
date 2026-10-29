@@ -137,6 +137,10 @@
       { url: "https://github.com/marcus/pitwall/pull/5", title: "Race brief: tyre sets per driver", repo: "marcus/pitwall", number: 5, author: "marcus", draft: true, updatedAt: hoursAgo(72), review: null, ci: null, branch: "tyre-sets", group: "mine", account: "marcus" },
     ],
   };
+  const DONE = [
+    { url: "https://github.com/acme/api/pull/85", title: "Cache product images at the edge", repo: "acme/api", number: 85, author: "marcus-work", group: "mine", account: "marcus-work", state: "MERGED", doneAt: Date.now() - 40 * 60e3 },
+    { url: "https://github.com/marcus/lumen/pull/11", title: "Try a separate settings page", repo: "marcus/lumen", number: 11, author: "marcus", group: "mine", account: "marcus", state: "CLOSED", doneAt: Date.now() - 5 * 3600e3 },
+  ];
   window.__prOpened = [];
   window.chrome = {
     runtime: {
@@ -148,9 +152,10 @@
       sendMessage: async (msg) => {
         if (msg.type === "prs:refresh") {
           await new Promise((r) => setTimeout(r, 400));
-          await local.set({ prState: { ...PRS, error: null, checkedAt: Date.now() } });
+          await local.set({ prState: { ...PRS, error: null, checkedAt: Date.now() }, ...(!("prDone" in local.data) && { prDone: DONE }) });
         }
         if (msg.type === "prs:open") window.__prOpened.push(msg.url);
+        if (msg.type === "prs:read") await local.set({ prDone: msg.urls ? (local.data.prDone || []).filter((d) => !msg.urls.includes(d.url)) : [] });
         return true;
       },
     },
