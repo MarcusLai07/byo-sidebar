@@ -12,6 +12,7 @@ import { renderInfo } from "./info.js";
 import { renderHistory } from "./history.js";
 import { renderMedia } from "./saver.js";
 import { renderExtensions } from "./extensions.js";
+import { renderPrs, reviewCount } from "./prs.js";
 import * as motion from "./motion.js";
 import { INSTANT } from "./instant.js";
 
@@ -24,6 +25,9 @@ const els = {
   skillsMenu: $("skills-menu"),
   mediaView: $("media-view"),
   extView: $("extensions-view"),
+  prsView: $("prs-view"),
+  prsBtn: $("prs-btn"),
+  prsBadge: $("prs-badge"),
   extBtn: $("ext-btn"),
   model: $("model"),
   newChat: $("new-chat"),
@@ -229,7 +233,7 @@ function showView(view) {
   return switching;
 }
 
-const viewEl = (v) => ({ history: els.historyView, info: els.infoView, media: els.mediaView, extensions: els.extView })[v] || els.messages;
+const viewEl = (v) => ({ history: els.historyView, info: els.infoView, media: els.mediaView, extensions: els.extView, prs: els.prsView })[v] || els.messages;
 
 async function switchView(view) {
   const next = state.view === view ? null : view;
@@ -244,6 +248,8 @@ async function switchView(view) {
   els.mediaView.hidden = state.view !== "media";
   els.extView.hidden = state.view !== "extensions";
   els.extBtn.classList.toggle("on", state.view === "extensions");
+  els.prsView.hidden = state.view !== "prs";
+  els.prsBtn.classList.toggle("on", state.view === "prs");
   els.messages.hidden = state.view !== null;
   els.historyBtn.classList.toggle("on", state.view === "history");
   els.infoBtn.classList.toggle("on", state.view === "info");
@@ -258,6 +264,10 @@ async function switchView(view) {
   if (state.view === "extensions") {
     let first = true;
     renderExtensions({ changed: (list) => first && ((first = false), motion.cascade(list.children, { gap: 22 })) });
+  }
+  if (state.view === "prs") {
+    let first = true;
+    renderPrs({ changed: (list) => first && ((first = false), motion.cascade(list.children, { gap: 22 })) });
   }
   if (state.view === "media") {
     // "done" returns to the chat with the images attached
@@ -281,6 +291,17 @@ function showInfo() {
 els.historyBtn.addEventListener("click", () => showView("history"));
 els.infoBtn.addEventListener("click", () => showView("info"));
 els.extBtn.addEventListener("click", () => showView("extensions"));
+els.prsBtn.addEventListener("click", () => showView("prs"));
+
+// Review requests waiting, on the PR button.
+async function updatePrBadge() {
+  const n = await reviewCount();
+  els.prsBadge.hidden = !n;
+  els.prsBadge.textContent = n > 9 ? "9+" : String(n);
+  els.prsBtn.title = n ? `Pull requests · ${n} waiting for your review` : "Pull requests";
+}
+chrome.storage.onChanged.addListener((changes, area) => area === "local" && changes.prState && updatePrBadge());
+updatePrBadge();
 
 // ---------- chats ----------
 
@@ -500,7 +521,7 @@ async function runInstant(action) {
 
   const activity = routerActivity(msg, () => fillTools(el.querySelector(".tools"), msg));
   try {
-    const out = await action.run(tab, { localTool: (name, input) => host.localTool(name, input, { activity }) });
+    const out = await action.run(tab, { localTool: (name, input) => host.localTool(name, input, { activity }), github: host.github });
     msg.text = out.text;
     if (out.sourceTab) Object.assign(msg, { sourceTabId: out.sourceTab.id, sourceUrl: out.sourceTab.url });
     userMsg.prompt = `${action.name} for ${tab.url}. (Lumen did this itself, without a model; its answer follows.)`;

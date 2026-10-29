@@ -11,6 +11,7 @@ const path = require("path");
 const providers = require("./providers");
 const config = require("./config");
 const video = require("./video");
+const github = require("./github");
 const { TOOLS, isLocal } = require("./providers/tools");
 
 const running = new Map(); // request id -> cancel()
@@ -149,6 +150,16 @@ async function handle(msg) {
     if (!isLocal(msg.name)) return send({ type: "local_result", id: msg.id, content: `Unknown tool ${msg.name}`, isError: true });
     const r = await runLocalTool(msg.id, msg.name, msg.input || {});
     send({ type: "local_result", id: msg.id, ...r });
+    return;
+  }
+
+  // GitHub pull requests (the panel's PR list, the background poller, PR page actions).
+  if (msg.type === "github") {
+    try {
+      send({ type: "github_result", id: msg.id, data: await github.run(msg.action, msg.input || {}) });
+    } catch (e) {
+      send({ type: "github_result", id: msg.id, error: e.message });
+    }
     return;
   }
 

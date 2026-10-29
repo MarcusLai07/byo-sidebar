@@ -1,3 +1,5 @@
+importScripts("prs-worker.js");
+
 // Open the panel when the toolbar icon (or your shortcut) is used.
 // Browsers without a working chrome.sidePanel get a docked popup window instead.
 if (chrome.sidePanel?.setPanelBehavior) {

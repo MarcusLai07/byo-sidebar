@@ -37,6 +37,11 @@ export function connect() {
       msg.isError ? r.error(msg.content) : r.done(msg.content);
       return;
     }
+    if (r && msg.type === "github_result") {
+      requests.delete(msg.id);
+      msg.error ? r.error(msg.error) : r.done(msg.data);
+      return;
+    }
     if (r) {
       if (msg.type === "tool_call") {
         // The model wants to browse: run the tool here and send the result back.
@@ -91,6 +96,18 @@ export function chat(request, handlers) {
     if (!requests.delete(id)) return;
     port?.postMessage({ type: "cancel", id });
   };
+}
+
+// A GitHub request through the router's gh logins (see host/github.js).
+export function github(action, input = {}) {
+  return new Promise((resolve, reject) => {
+    const id = crypto.randomUUID();
+    requests.set(id, { done: resolve, error: (m) => reject(new Error(m)), delta() {} });
+    if (!post({ type: "github", id, action, input })) {
+      requests.delete(id);
+      reject(new Error("The local router isn't running."));
+    }
+  });
 }
 
 // Run one of the router's own tools (e.g. video_transcript) without a model.

@@ -8,6 +8,8 @@ import * as techstack from "./techstack.js";
 const host = ctx.hostOf;
 const isYouTubeVideo = (tab) => /^https:\/\/(www\.|m\.)?youtube\.com\/watch/.test(tab?.url || "");
 const isWeb = (tab) => /^https?:/.test(tab?.url || "");
+const isPr = (tab) => /^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(tab?.url || "");
+const BUCKET = { pass: "✓", fail: "✕", pending: "●", skipping: "–", cancel: "–" };
 const mdText = (s) => String(s).replace(/([[\]`*_|])/g, "\\$1").replace(/\s+/g, " ").trim();
 
 const inPage = (tab, func) => ctx.inPage(tab.id, func).catch(() => {
@@ -83,6 +85,68 @@ function timedLines(text) {
 }
 
 export const INSTANT = [
+  {
+    id: "prchecks",
+    name: "PR checks",
+    sub: "Each check's status, with links",
+    when: isPr,
+    async run(tab, { github }) {
+      const checks = await github("checks", { url: tab.url });
+      if (!checks.length) return { text: "This pull request has no checks." };
+      const order = { fail: 0, pending: 1, pass: 2 };
+      checks.sort((a, b) => (order[a.bucket] ?? 3) - (order[b.bucket] ?? 3));
+      const failed = checks.filter((c) => c.bucket === "fail").length;
+      const rows = checks.map((c) => `| ${BUCKET[c.bucket] || "·"} | ${c.link ? `[${mdText(c.name)}](${c.link})` : mdText(c.name)} | ${mdText(c.workflow || "")} |`);
+      return {
+        text: [`**${checks.length} checks**${failed ? ` · ${failed} failed` : " · none failed"}`, "", "| | Check | Workflow |", "|---|---|---|", ...rows].join("\n"),
+      };
+    },
+  },
+  {
+    id: "prrerun",
+    name: "Re-run failed checks",
+    sub: "Only the failed GitHub Actions jobs",
+    when: isPr,
+    async run(tab, { github }) {
+      const { rerun, others } = await github("rerunFailed", { url: tab.url });
+      const note = others.length ? `\n\n${others.map(mdText).join(", ")} failed too, but ${others.length > 1 ? "they run" : "it runs"} outside GitHub Actions: re-run ${others.length > 1 ? "them" : "it"} from that service.` : "";
+      return { text: (rerun ? `Re-running the failed jobs of ${rerun} workflow run${rerun > 1 ? "s" : ""}.` : "No failed GitHub Actions jobs to re-run.") + note };
+    },
+  },
+  {
+    id: "prdiff",
+    name: "PR diff",
+    sub: "The full diff, for follow-up questions",
+    when: isPr,
+    async run(tab, { github }) {
+      const d = await github("diff", { url: tab.url });
+      const MAX = 60000;
+      const body = d.diff.length > MAX ? `${d.diff.slice(0, MAX)}\n… (${d.diff.length - MAX} more characters not shown)` : d.diff;
+      return {
+        text: [
+          `**${mdText(d.title)}** · \`${d.headRefName}\` → \`${d.baseRefName}\` · ${d.changedFiles} files, +${d.additions} −${d.deletions}`,
+          "",
+          "*Ask a follow-up (review it, explain a change, write the description) and your model sees this diff.*",
+          "",
+          "```diff",
+          body.replace(/^```/gm, "` ``"),
+          "```",
+        ].join("\n"),
+      };
+    },
+  },
+  {
+    id: "prbranch",
+    name: "Copy branch name",
+    sub: "And the checkout command",
+    when: isPr,
+    async run(tab, { github }) {
+      const i = await github("info", { url: tab.url });
+      await navigator.clipboard.writeText(i.headRefName);
+      const number = tab.url.match(/\/pull\/(\d+)/)[1];
+      return { text: `Copied \`${i.headRefName}\` (into \`${i.baseRefName}\`).\n\nTo check it out: \`gh pr checkout ${number}\`` };
+    },
+  },
   {
     id: "techstack",
     name: "Detect tech stack",

@@ -948,6 +948,41 @@ button.refresh.spinning { animation: spin 0.6s linear infinite; }
 .switch input:checked + span::after { transform: translateX(14px); }
 .switch input:disabled + span { opacity: 0.4; cursor: default; }
 
+/* ---------- pull requests ---------- */
+
+.prs-title { font-size: 13px; font-weight: 600; }
+#prs-updated { flex: 1; }
+.pr-row { width: 100%; margin-bottom: 6px; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.pr-row:hover { background: var(--hover); }
+.pr-row { grid-template-columns: 18px 1fr auto; }
+.pr-row .ext-info strong { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pr-ci { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; font-weight: 700; }
+.pr-ci.pass { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.pr-ci.fail { background: color-mix(in srgb, var(--error) 18%, transparent); color: var(--error); }
+.pr-ci.pending { color: #e0a32e; font-size: 8px; animation: live-pulse 1.6s ease-in-out infinite; }
+.pr-ci.none { background: var(--border); transform: scale(0.45); }
+.pr-side { align-self: start; color: var(--muted); font-size: 10px; }
+.prs-settings { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.pr-setting { display: flex; gap: 10px; align-items: center; justify-content: space-between; color: var(--muted); font-size: 12px; cursor: pointer; }
+
+/* A count on a header button (review requests waiting). */
+button.icon { position: relative; }
+.badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
 .ext-foot { display: flex; gap: 6px; justify-content: space-between; margin-top: 4px; }
 
 .ext-foot button {

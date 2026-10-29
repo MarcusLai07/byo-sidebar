@@ -119,6 +119,25 @@
     tabs[1].url = "https://www.youtube.com/watch?v=demo2";
   }
   const session = store("session");
+  const local = store("local");
+  const storageChanged = listeners();
+  local.onChanged.addListener((c) => storageChanged.fire(c, "local"));
+  session.onChanged.addListener((c) => storageChanged.fire(c, "session"));
+
+  // The PR list: what the background poller would store, refreshed on prs:refresh.
+  const hoursAgo = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+  const PRS = {
+    accounts: ["marcus-work", "marcus"],
+    errors: [],
+    items: [
+      { url: "https://github.com/acme/shop/pull/412", title: "Checkout: retry card payments once on network errors", repo: "acme/shop", number: 412, author: "jlee", draft: false, updatedAt: hoursAgo(0.3), review: "REVIEW_REQUIRED", ci: "pass", branch: "retry-payments", group: "review", account: "marcus-work" },
+      { url: "https://github.com/acme/api/pull/88", title: "Rate-limit the public search endpoint", repo: "acme/api", number: 88, author: "priya", draft: false, updatedAt: hoursAgo(2), review: "REVIEW_REQUIRED", ci: "pending", branch: "search-limits", group: "review", account: "marcus-work" },
+      { url: "https://github.com/acme/shop/pull/409", title: "Release 2026-10-29: package edits, stock-take recount", repo: "acme/shop", number: 409, author: "marcus-work", draft: false, updatedAt: hoursAgo(1), review: "CHANGES_REQUESTED", ci: "fail", branch: "release/2026-10-29", group: "mine", account: "marcus-work" },
+      { url: "https://github.com/marcus/lumen/pull/12", title: "Media strip: LIVE button for live streams", repo: "marcus/lumen", number: 12, author: "marcus", draft: false, updatedAt: hoursAgo(26), review: "APPROVED", ci: "pass", branch: "live-button", group: "mine", account: "marcus" },
+      { url: "https://github.com/marcus/pitwall/pull/5", title: "Race brief: tyre sets per driver", repo: "marcus/pitwall", number: 5, author: "marcus", draft: true, updatedAt: hoursAgo(72), review: null, ci: null, branch: "tyre-sets", group: "mine", account: "marcus" },
+    ],
+  };
+  window.__prOpened = [];
   window.chrome = {
     runtime: {
       connectNative: () => fakePort(),
@@ -126,8 +145,16 @@
       getURL: (p) => `/extension/${p}`,
       id: "fndhgaclkabpgpmigidbibafjaijeglj",
       lastError: null,
+      sendMessage: async (msg) => {
+        if (msg.type === "prs:refresh") {
+          await new Promise((r) => setTimeout(r, 400));
+          await local.set({ prState: { ...PRS, error: null, checkedAt: Date.now() } });
+        }
+        if (msg.type === "prs:open") window.__prOpened.push(msg.url);
+        return true;
+      },
     },
-    storage: { local: store("local"), session },
+    storage: { local, session, onChanged: storageChanged },
     tabs: {
       query: async (q) => {
         if (q.url) return [];

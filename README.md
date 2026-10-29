@@ -34,6 +34,7 @@ That's it. **Update:** run the same line again, then click ↻ on Lumen in the e
 | | |
 |---|---|
 | Needs | macOS, Node.js 18+ (the installer offers `brew install node` if it's missing) |
+| Pull requests | uses your `gh` logins if the GitHub CLI is installed (`brew install gh && gh auth login`) |
 | Video tools | asks before installing `yt-dlp` + `ffmpeg` (≈0.5 GB). Skip the question with `--with-video` or `--no-video` |
 | Somewhere else | `--dir ~/Apps/Lumen` |
 | Uninstall | `curl -fsSL …/install.sh \| bash -s -- --uninstall` then remove Lumen from the extensions page |
@@ -92,6 +93,7 @@ Installed a CLI after Lumen? Run the install line again so the router finds it.
 
 - **Media strip:** a mini player for every tab playing audio or video: play, skip, seek, mute, jump to it. Live streams (YouTube Live, Twitch, sports) get a **LIVE** tag; fall behind and **Go live** jumps back to now.
 - **Save images & videos** from a page at full size, into `Downloads/Lumen/<site>/`.
+- **Pull requests**, like Arc's live folders: your open PRs from every `gh` account (review requested, yours, assigned) with CI and review status, checked every 3 minutes. New review requests can notify you and open in a "PRs" tab group, and those tabs close once the PR is merged. On a PR page, ⚡ → Instant has its checks, a re-run of failed jobs, the full diff for follow-up questions, and the branch name. Needs the [GitHub CLI](https://cli.github.com) signed in (`gh auth login`).
 - **Extensions manager** (🧩): every extension with on/off switches, options and remove.
 - **Attachments:** images, PDFs, text, a screenshot of the tab, or a recent download.
 - **Read-only browsing:** when it needs more, the AI can read your tabs and open links in the background. It never clicks or types, and asks before visiting links that came from nowhere.

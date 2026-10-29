@@ -38,10 +38,12 @@ GEMINI_BIN="$(command -v gemini || true)"
 YTDLP_BIN="$(command -v yt-dlp || true)"
 PARAKEET_BIN="$(command -v parakeet-mlx || true)"
 WHISPER_BIN="$(command -v whisper-cli || true)"
+# For the PR list: the GitHub CLI and its logins.
+GH_BIN="$(command -v gh || true)"
 
 # Browsers launch hosts with a bare environment, so bake absolute paths in.
 EXTRA_PATH=""
-for b in "$CLAUDE_BIN" "$CODEX_BIN" "$GEMINI_BIN" "$YTDLP_BIN" "$PARAKEET_BIN" "$WHISPER_BIN" "$(command -v ffmpeg || true)"; do
+for b in "$GH_BIN" "$CLAUDE_BIN" "$CODEX_BIN" "$GEMINI_BIN" "$YTDLP_BIN" "$PARAKEET_BIN" "$WHISPER_BIN" "$(command -v ffmpeg || true)"; do
   [[ -n "$b" ]] && EXTRA_PATH="$EXTRA_PATH$(dirname "$b"):"
 done
 cat > "$LAUNCHER" <<EOF
@@ -53,6 +55,7 @@ export LUMEN_GEMINI_BIN="${GEMINI_BIN:-gemini}"
 export LUMEN_YTDLP_BIN="${YTDLP_BIN:-yt-dlp}"
 export LUMEN_PARAKEET_BIN="${PARAKEET_BIN:-parakeet-mlx}"
 export LUMEN_WHISPER_BIN="${WHISPER_BIN:-whisper-cli}"
+export LUMEN_GH_BIN="${GH_BIN:-gh}"
 ${LUMEN_WHISPER_MODEL:+export LUMEN_WHISPER_MODEL="$LUMEN_WHISPER_MODEL"}
 exec "$NODE_BIN" "$DIR/router.js" 2>>"$LOG_DIR/host.log"
 EOF
@@ -102,6 +105,9 @@ echo "Video transcripts (optional):"
 echo "  yt-dlp:      ${YTDLP_BIN:-not installed (brew install yt-dlp ffmpeg)}"
 echo "  Parakeet:    ${PARAKEET_BIN:-not installed (uv tool install parakeet-mlx; English/European audio)}"
 echo "  whisper.cpp: ${WHISPER_BIN:-not installed (brew install whisper.cpp; any language)}"
+echo
+echo "Pull requests (optional):"
+echo "  GitHub CLI:  ${GH_BIN:-not installed (brew install gh, then: gh auth login)}"
 echo
 echo "API keys can be added from the panel's ⓘ screen. Re-run this script after installing anything above."
 echo "Router installed to: $DIR"
