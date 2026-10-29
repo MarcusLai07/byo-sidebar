@@ -961,7 +961,15 @@ button.refresh.spinning { animation: spin 0.6s linear infinite; }
 .pr-ci.fail { background: color-mix(in srgb, var(--error) 18%, transparent); color: var(--error); }
 .pr-ci.pending { color: #e0a32e; font-size: 8px; animation: live-pulse 1.6s ease-in-out infinite; }
 .pr-ci.none { background: var(--border); transform: scale(0.45); }
-.pr-side { align-self: start; color: var(--muted); font-size: 10px; }
+.pr-side { align-self: center; color: var(--muted); font-size: 10px; }
+.pr-row { position: relative; overflow: hidden; }
+.pr-row::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--repo); }
+.pr-open { padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); font-weight: 600; }
+.pr-repo { display: flex; gap: 6px; align-items: baseline; margin: 8px 2px 4px; font-size: 11.5px; }
+.pr-repo-dot { width: 8px; height: 8px; border-radius: 3px; background: var(--repo); align-self: center; }
+.pr-repo-owner { color: var(--muted); }
+.pr-repo strong { font-weight: 600; }
+.pr-repo-account { margin-left: auto; color: var(--muted); font-size: 10px; }
 .prs-settings { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .pr-setting { display: flex; gap: 10px; align-items: center; justify-content: space-between; color: var(--muted); font-size: 12px; cursor: pointer; }
 

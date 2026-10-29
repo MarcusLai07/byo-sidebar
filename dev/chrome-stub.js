@@ -157,6 +157,8 @@
     storage: { local, session, onChanged: storageChanged },
     tabs: {
       query: async (q) => {
+        // A PR already open (spelled differently, like a Dia live-folder tab).
+        if (q.url === "https://github.com/*") return [{ id: 50, windowId: 1, url: "https://github.com/ACME/Shop/pull/412/files?w=1" }];
         if (q.url) return [];
         if (q.audible) return DEMO ? tabs.filter((t) => t.audible) : [];
         if (q.groupId != null) return tabs.filter((t) => t.groupId === q.groupId);

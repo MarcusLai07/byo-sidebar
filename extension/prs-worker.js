@@ -23,10 +23,23 @@ async function prSettings() {
   return { ...PR_DEFAULTS, ...s };
 }
 
-// Tabs showing this PR (its conversation, files or checks), but not pull/12 for pull/1.
-const prTabs = async (url) => (await chrome.tabs.query({ url: `${url}*` })).filter((t) => /^[/?#]|^$/.test(t.url.slice(url.length)));
+// "owner/repo#123" for any page of a PR (conversation, files, checks, with or without
+// ?query or #anchor), ignoring case: GitHub's API and the tab (Dia's live folders, a
+// pasted link) don't always spell the owner the same way.
+const prKey = (url) => {
+  const m = String(url || "").match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)(?:[/?#]|$)/i);
+  return m ? `${m[1]}/${m[2]}#${m[3]}`.toLowerCase() : null;
+};
 
-// Focus the tab already showing this PR, or open it.
+// Tabs showing this PR, the one you used last first.
+async function prTabs(url) {
+  const key = prKey(url);
+  const all = await chrome.tabs.query({ url: "https://github.com/*" });
+  return all.filter((t) => prKey(t.url || t.pendingUrl) === key).sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+}
+
+// Focus the tab already showing this PR (wherever it is: a live folder, a group,
+// another window), or open it.
 async function openPr(url, { active = true } = {}) {
   const [tab] = await prTabs(url);
   if (tab) {
@@ -101,7 +114,7 @@ async function doPoll() {
     const states = await github("states", { urls: gone }).catch(() => ({}));
     for (const url of gone) {
       const tab = await chrome.tabs.get(prOpened[url]).catch(() => null);
-      if (!tab || !/^[/?#]|^$/.test(tab.url.startsWith(url) ? tab.url.slice(url.length) : "x")) delete prOpened[url]; // closed or navigated away: not ours anymore
+      if (!tab || prKey(tab.url) !== prKey(url)) delete prOpened[url]; // closed or navigated away: not ours anymore
       else if (states[url] === "MERGED" || states[url] === "CLOSED") {
         if (settings.autoClose) await chrome.tabs.remove(tab.id).catch(() => {});
         delete prOpened[url];
