@@ -133,6 +133,11 @@
       ["[staging] Release · Pull Request #131 · CTG-Business/o2o-platform", "https://github.com/CTG-Business/o2o-platform/pull/131"],
     ];
     for (const [title, url] of extra) tabs.push({ id: 100 + tabs.length, windowId: 1, active: false, groupId: -1, title, url, favIconUrl: "", mutedInfo: { muted: false } });
+    // Like Dia: a sidebar-folder tab is in a group that tabGroups.query doesn't list,
+    // and a favorite is an ordinary loose tab.
+    tabs.push({ id: 190, windowId: 1, active: false, groupId: 1, title: "Quick Start – React", url: "https://react.dev/learn", favIconUrl: "" });
+    tabs.push({ id: 191, windowId: 1, active: false, groupId: -1, title: "YouTube Music", url: "https://music.youtube.com/", favIconUrl: "" });
+    tabs.push({ id: 192, windowId: 1, active: false, groupId: -1, title: "(38) YouTube", url: "https://www.youtube.com/", favIconUrl: "" });
     tabs.forEach((t) => t.groupId === 9 && (t.groupId = -1));
   }
   tabs.forEach((t, i) => (t.index = i));

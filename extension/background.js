@@ -35,7 +35,24 @@ const MENU = [
   { id: "skill:translate", title: "Translate to English", contexts: ["selection"] },
   { id: "skill:summarize", title: "Summarize this page", contexts: ["page"] },
   { id: "ask-image", title: "Ask about this image", contexts: ["image"] },
+  // For Dia's favorites, which look like any other tab to extensions (see panel/tidy.js).
+  { id: "never-tab", title: "Never tidy this tab", contexts: ["page"] },
+  { id: "never-site", title: "Never tidy this site", contexts: ["page"] },
 ];
+
+// Same storage as panel/tidy.js neverTidy(): the tab by id for now and by address
+// for next time, or the whole site.
+async function neverTidy(tab, wholeSite) {
+  const { neverTidy: k = {} } = await chrome.storage.local.get("neverTidy");
+  const u = new URL(tab.url);
+  if (wholeSite) k.sites = [...new Set([...(k.sites || []), u.hostname.replace(/^www\./, "")])];
+  else {
+    const { neverTidyTabs: ids = [] } = await chrome.storage.session.get("neverTidyTabs");
+    await chrome.storage.session.set({ neverTidyTabs: [...new Set([...ids, tab.id])] });
+    k.pages = [...new Set([...(k.pages || []), u.origin + u.pathname])];
+  }
+  await chrome.storage.local.set({ neverTidy: k });
+}
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
@@ -56,6 +73,10 @@ function openPanel(windowId) {
 }
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === "never-tab" || info.menuItemId === "never-site") {
+    if (tab?.url && /^https?:/.test(tab.url)) neverTidy(tab, info.menuItemId === "never-site");
+    return;
+  }
   openPanel(tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT); // no tab in some PDF viewers and frames
   const id = String(info.menuItemId);
   if (id === "ask-selection") hand({ kind: "selection", selection: info.selectionText });

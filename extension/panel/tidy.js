@@ -4,9 +4,16 @@
 //                broad kinds of site (Dev, Shopping, Video…).
 //   bySite:      one group per site.
 //   duplicates:  closes extra copies of the same page.
-// Pinned tabs, tabs already in a group and everyday tools (mail, calendar, chat) are
-// left alone; re-tidying adds new tabs to a matching group by name. Each action
-// returns { summary, undo }.
+// Pinned tabs, tabs already in a group (Dia's sidebar folders count: extensions see
+// them as groups), everyday tools (mail, calendar, chat) and anything on your
+// Never-tidy list are left alone; re-tidying adds new tabs to a matching group by
+// name. Each action returns { summary, undo }.
+//
+// Never tidy: Dia's favorites look exactly like ordinary tabs to extensions, so you
+// mark them (right-click → Lumen → Never tidy this tab / site, or ⓘ → Tidy tabs).
+// A tab is kept by its id while it's open (storage.session: neverTidyTabs) and by
+// its address for next time (storage.local: neverTidy.pages); a site by host
+// (neverTidy.sites), including its subdomains.
 
 const KEEP_LOOSE = /^(mail\.google|calendar\.google|web\.whatsapp|app\.slack|outlook\.(live|office)|teams\.microsoft|discord|messenger|web\.telegram|meet\.google)\./;
 
@@ -83,9 +90,9 @@ function wordsOf(tab, site) {
 
 // Planned groups for a window's tabs: [{ title, tabIds, groupId? }], where groupId
 // means "add to this existing group". level: "broad" | "balanced" | "specific".
-export function plan(tabs, groups = [], level = "balanced") {
+export function plan(tabs, groups = [], level = "balanced", kept = () => false) {
   const loose = tabs
-    .filter((t) => !t.pinned && (t.groupId == null || t.groupId === -1) && /^https?:/.test(t.url || ""))
+    .filter((t) => !t.pinned && (t.groupId == null || t.groupId === -1) && /^https?:/.test(t.url || "") && !kept(t))
     .map((t) => {
       const host = hostOf(t.url);
       const site = siteOf(host);
@@ -171,6 +178,54 @@ export function plan(tabs, groups = [], level = "balanced") {
   return out;
 }
 
+// ---------- never tidy ----------
+
+const pageOf = (url) => {
+  try {
+    const u = new URL(url);
+    return u.origin + u.pathname;
+  } catch {
+    return "";
+  }
+};
+
+// (tab) => true for tabs on the Never-tidy list.
+export async function keptCheck() {
+  const [{ neverTidy: k = {} }, { neverTidyTabs: ids = [] }] = await Promise.all([chrome.storage.local.get("neverTidy"), chrome.storage.session.get("neverTidyTabs")]);
+  const pages = new Set(k.pages || []);
+  const sites = k.sites || [];
+  return (t) => {
+    if (ids.includes(t.id) || pages.has(pageOf(t.url))) return true;
+    const host = hostOf(t.url);
+    return sites.some((s) => host === s || host.endsWith(`.${s}`));
+  };
+}
+
+// Adds a tab ({ id, url }) or a site ("music.youtube.com") to the list.
+export async function neverTidy({ tab, site }) {
+  const { neverTidy: k = {} } = await chrome.storage.local.get("neverTidy");
+  if (tab) {
+    const { neverTidyTabs: ids = [] } = await chrome.storage.session.get("neverTidyTabs");
+    await chrome.storage.session.set({ neverTidyTabs: [...new Set([...ids, tab.id])] });
+    k.pages = [...new Set([...(k.pages || []), pageOf(tab.url)])];
+  }
+  if (site) k.sites = [...new Set([...(k.sites || []), site.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "").toLowerCase()])];
+  await chrome.storage.local.set({ neverTidy: k });
+}
+
+export async function allowTidy({ page, site }) {
+  const { neverTidy: k = {} } = await chrome.storage.local.get("neverTidy");
+  if (page) {
+    k.pages = (k.pages || []).filter((p) => p !== page);
+    // Also let go of the open tab that was kept by id.
+    const { neverTidyTabs: ids = [] } = await chrome.storage.session.get("neverTidyTabs");
+    const open = await chrome.tabs.query({});
+    await chrome.storage.session.set({ neverTidyTabs: ids.filter((id) => pageOf(open.find((t) => t.id === id)?.url) !== page) });
+  }
+  if (site) k.sites = (k.sites || []).filter((s) => s !== site);
+  await chrome.storage.local.set({ neverTidy: k });
+}
+
 // ---------- applying, with undo ----------
 
 async function windowTabs() {
@@ -201,7 +256,7 @@ const describe = (planned) =>
 
 export async function tidy(level = "balanced") {
   const { win, tabs, groups } = await windowTabs();
-  const planned = plan(tabs, groups, level);
+  const planned = plan(tabs, groups, level, await keptCheck());
   if (!planned.length) return { summary: "Nothing to tidy: no loose tabs share a topic or site." };
   const undo = await apply(planned, win, tabs);
   const n = planned.reduce((s, g) => s + g.tabIds.length, 0);
@@ -210,7 +265,8 @@ export async function tidy(level = "balanced") {
 
 export async function bySite() {
   const { win, tabs } = await windowTabs();
-  const loose = tabs.filter((t) => !t.pinned && t.groupId === -1 && /^https?:/.test(t.url || ""));
+  const kept = await keptCheck();
+  const loose = tabs.filter((t) => !t.pinned && t.groupId === -1 && /^https?:/.test(t.url || "") && !kept(t));
   const sites = new Map();
   for (const t of loose) {
     const site = siteOf(hostOf(t.url));
@@ -235,13 +291,17 @@ const pageKey = (url) => {
 export async function closeDuplicates() {
   const { tabs } = await windowTabs();
   const pages = new Map();
+  const kept = await keptCheck();
   for (const t of tabs) if (!t.pinned && /^https?:/.test(t.url || "")) pages.set(pageKey(t.url), [...(pages.get(pageKey(t.url)) || []), t]);
   const close = [];
   for (const copies of pages.values()) {
     if (copies.length < 2) continue;
-    // Keep the tab you're on, otherwise the one used most recently.
-    const keep = copies.find((t) => t.active) || [...copies].sort((a, b) => (b.lastAccessed || b.id) - (a.lastAccessed || a.id))[0];
-    close.push(...copies.filter((t) => t !== keep));
+    // Only loose copies are ever closed: never a tab in a group, one of Dia's sidebar
+    // folders (which extensions see as groups) or a Never-tidy tab. Of the rest, keep the
+    // tab you're on, otherwise the one used last, unless a grouped copy stays anyway.
+    const loose = copies.filter((t) => t.groupId === -1 && !kept(t));
+    const keep = loose.length === copies.length ? copies.find((t) => t.active) || [...copies].sort((a, b) => (b.lastAccessed || b.id) - (a.lastAccessed || a.id))[0] : loose.find((t) => t.active);
+    close.push(...loose.filter((t) => t !== keep));
   }
   if (!close.length) return { summary: "No duplicate tabs." };
   await chrome.tabs.remove(close.map((t) => t.id));
