@@ -38,7 +38,9 @@ window.chrome={
   scripting:{executeScript:({func,args=[]})=>{
     // Like the real API: arguments must be JSON-serializable, or it throws synchronously.
     if (args.some((a)=>a===undefined)) throw new TypeError("Error at parameter 'injection': Value is unserializable.");
-    return Promise.resolve([{frameId:0,result:func(...args)}]);}},
+    // ?slow: pages that take longer to read than the 1s poll (heavy YouTube pages, many frames).
+    const result=[{frameId:0,result:func(...args)}];
+    return location.search.includes("slow")?new Promise((r)=>setTimeout(()=>r(result),1500)):Promise.resolve(result);}},
 };
 </script>
 <script src="../extension/media.js"></script>

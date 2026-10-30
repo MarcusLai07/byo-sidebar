@@ -158,11 +158,24 @@
     return tabs.filter((t) => t && !dismissed.has(t.id) && /^https?:/.test(t.url || ""));
   }
 
-  // Polls and tab events overlap: only the latest refresh may render, and none while hidden.
-  let refreshSeq = 0;
-  async function refresh() {
+  // One refresh at a time, none while hidden. Polls and tab events that arrive meanwhile
+  // queue a single follow-up. (Dropping a slow refresh for a newer one instead meant
+  // that on pages slower to read than the 1s poll, like YouTube, nothing ever rendered.)
+  let refreshing = null;
+  let again = false;
+  function refresh() {
     if (document.visibilityState !== "visible") return;
-    const seq = ++refreshSeq;
+    if (refreshing) return void (again = true);
+    refreshing = readPlayers().finally(() => {
+      refreshing = null;
+      if (again) {
+        again = false;
+        refresh();
+      }
+    });
+  }
+
+  async function readPlayers() {
     const tabs = await candidates();
     const players = await Promise.all(
       tabs.map(async (tab) => {
@@ -173,7 +186,7 @@
         return { tab, frameId: best?.frameId, state: best?.value || { paused: false, hasElement: false } };
       })
     );
-    if (seq === refreshSeq) render(players.filter(Boolean));
+    render(players.filter(Boolean));
   }
 
   async function act(player, action, value) {
