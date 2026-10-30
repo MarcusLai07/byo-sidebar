@@ -1400,6 +1400,10 @@ main,
   box-shadow: var(--glass-shadow), var(--glass-highlight);
 }
 
+.toast:has(.toast-action) { display: flex; gap: 10px; align-items: center; padding-right: 6px; }
+.toast-action { flex-shrink: 0; padding: 3px 10px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-fg); font: inherit; font-weight: 600; }
+.tidy-levels { margin: 8px 0 4px; }
+
 /* ---------- composer: one floating card, chips inside ---------- */
 
 footer {

@@ -14,6 +14,7 @@ import { renderMedia } from "./saver.js";
 import { renderExtensions } from "./extensions.js";
 import { renderPrs, counts as prCounts } from "./prs.js";
 import * as motion from "./motion.js";
+import * as tidy from "./tidy.js";
 import { INSTANT } from "./instant.js";
 
 const $ = (id) => document.getElementById(id);
@@ -533,6 +534,12 @@ async function runInstant(action) {
   if (!stopped) await finish(msg.error);
 }
 
+// Tab tidying (tidy.js): the result in a toast, with Undo when something changed.
+async function runTidy(fn) {
+  const { summary, undo } = await fn();
+  toast(summary, undo && { label: "Undo", run: async () => (await undo(), toast("Undone.")) });
+}
+
 // ---------- skills dropdown (⚡ next to the model) ----------
 
 async function openSkillsMenu() {
@@ -595,6 +602,9 @@ async function openSkillsMenu() {
     action("Save images & videos", "Download what's on this page, or attach images", () => state.view !== "media" && showView("media")),
     action("Screenshot this tab", "Attach what's visible right now", async () => addAttachment(await ctx.screenshot())),
     action("Upload a file", "Images, PDFs or text", () => els.fileInput.click()),
+    action("Tidy tabs", "Sort loose tabs into named groups, on this Mac (no AI)", () => runTidy(() => tidy.tidy(localStorage.getItem("tidyLevel") || "balanced"))),
+    action("Group by site", "One tab group per website", () => runTidy(tidy.bySite)),
+    action("Close duplicate tabs", "Keeps the one you're on or used last", () => runTidy(tidy.closeDuplicates)),
   ];
   // Tabs instead of stacked sections, so each group fits without scrolling.
   const groups = [
@@ -975,18 +985,33 @@ function hideBanner() {
 
 let toastTimer = 0;
 let toastId = 0;
-function toast(text) {
+// action: { label, run } adds a button (e.g. Undo); such toasts stay up longer.
+function toast(text, action) {
   els.toast.textContent = text;
+  if (action) {
+    const b = Object.assign(document.createElement("button"), { type: "button", className: "toast-action", textContent: action.label });
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      try {
+        await action.run();
+      } finally {
+        hideToast();
+      }
+    });
+    els.toast.append(b);
+  }
   els.toast.hidden = false;
   motion.toastIn(els.toast);
   clearTimeout(toastTimer);
   const shown = ++toastId;
-  toastTimer = setTimeout(async () => {
+  toastTimer = setTimeout(hideToast, action ? 8000 : 2600);
+  async function hideToast() {
+    clearTimeout(toastTimer);
     await motion.leave(els.toast, { y: 14, scale: 0.92, duration: 200 });
     if (shown !== toastId) return; // a newer toast came up while this one left
     els.toast.hidden = true;
     motion.reset(els.toast);
-  }, 2600);
+  }
 }
 
 // ---------- composer: context chips ----------

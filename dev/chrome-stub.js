@@ -118,6 +118,29 @@
     tabs[1].title = "Die For You x Is There Someone Else – YouTube";
     tabs[1].url = "https://www.youtube.com/watch?v=demo2";
   }
+  // ?harness&tidy: a messy window for the tidy-tabs actions.
+  if (location.search.includes("tidy")) {
+    const extra = [
+      ["Inbox (3) - Gmail", "https://mail.google.com/mail/u/0/#inbox"],
+      ["Tokyo Hotels: Find Cheap Deals - Booking.com", "https://www.booking.com/city/jp/tokyo.html"],
+      ["useEffect – React", "https://react.dev/reference/react/useEffect"],
+      ["Standing Desks | IKEA", "https://www.ikea.com/my/en/cat/standing-desks"],
+      ["Best Things to Do in Tokyo 2026 - Time Out", "https://www.timeout.com/tokyo/things-to-do"],
+      ["Quick Start – React", "https://react.dev/learn"],
+      ["The 3 Best Standing Desks of 2026 | Wirecutter", "https://www.nytimes.com/wirecutter/reviews/best-standing-desk/"],
+      ["Quick Start – React", "https://react.dev/learn#top"],
+      ["Release 2026-10-29 · Pull Request #130 · CTG-Business/o2o-platform", "https://github.com/CTG-Business/o2o-platform/pull/130"],
+      ["[staging] Release · Pull Request #131 · CTG-Business/o2o-platform", "https://github.com/CTG-Business/o2o-platform/pull/131"],
+    ];
+    for (const [title, url] of extra) tabs.push({ id: 100 + tabs.length, windowId: 1, active: false, groupId: -1, title, url, favIconUrl: "", mutedInfo: { muted: false } });
+    tabs.forEach((t) => t.groupId === 9 && (t.groupId = -1));
+  }
+  tabs.forEach((t, i) => (t.index = i));
+  const groups = location.search.includes("tidy") ? [] : [{ id: 9, title: "Research", windowId: 1 }];
+  const reindex = () => tabs.forEach((t, i) => (t.index = i));
+  window.__tabs = tabs;
+  window.__groups = groups;
+
   const session = store("session");
   const local = store("local");
   const storageChanged = listeners();
@@ -167,6 +190,7 @@
         if (q.url) return [];
         if (q.audible) return DEMO ? tabs.filter((t) => t.audible) : [];
         if (q.groupId != null) return tabs.filter((t) => t.groupId === q.groupId);
+        if (q.windowId != null) return tabs.map((t) => ({ ...t, groupId: t.groupId ?? -1 }));
         if (q.active) return tabs.filter((t) => t.active);
         return tabs;
       },
@@ -179,10 +203,34 @@
         setTimeout(() => chrome.tabs.onUpdated.fire(tab.id, { status: "complete" }, tab), 30);
         return tab;
       },
-      remove: async (id) => {
-        const i = tabs.findIndex((t) => t.id === id);
-        if (i >= 0) tabs.splice(i, 1);
-        window.__removed = id;
+      remove: async (ids) => {
+        for (const id of [].concat(ids)) {
+          const i = tabs.findIndex((t) => t.id === id);
+          if (i >= 0) tabs.splice(i, 1);
+          window.__removed = id;
+        }
+        reindex();
+      },
+      // Tab groups, roughly like the browser: grouping moves tabs next to each other.
+      group: async ({ tabIds, groupId, createProperties }) => {
+        const id = groupId ?? 200 + groups.length;
+        if (groupId == null) groups.push({ id, title: "", color: "grey", windowId: createProperties?.windowId ?? 1 });
+        const moving = tabIds.map((tid) => tabs.find((t) => t.id === tid));
+        for (const t of moving) tabs.splice(tabs.indexOf(t), 1);
+        const last = tabs.findLastIndex((t) => t.groupId === id);
+        tabs.splice(last >= 0 ? last + 1 : tabs.length, 0, ...moving.map((t) => Object.assign(t, { groupId: id })));
+        reindex();
+        return id;
+      },
+      ungroup: async (ids) => {
+        for (const id of [].concat(ids)) Object.assign(tabs.find((t) => t.id === id) || {}, { groupId: -1 });
+        for (let i = groups.length - 1; i >= 0; i--) if (!tabs.some((t) => t.groupId === groups[i].id)) groups.splice(i, 1);
+      },
+      move: async (id, { index }) => {
+        const t = tabs.find((x) => x.id === id);
+        tabs.splice(tabs.indexOf(t), 1);
+        tabs.splice(index, 0, t);
+        reindex();
       },
       captureVisibleTab: async () => "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==",
       onActivated: listeners(),
@@ -207,8 +255,11 @@
         onInstalled: listeners(), onUninstalled: listeners(), onEnabled: listeners(), onDisabled: listeners(),
       };
     })(),
-    tabGroups: { query: async () => [{ id: 9, title: "Research", windowId: 1 }] },
-    windows: { update: async () => {}, WINDOW_ID_CURRENT: -2 },
+    tabGroups: {
+      query: async () => groups.map((g) => ({ ...g })),
+      update: async (id, o) => Object.assign(groups.find((g) => g.id === id), o),
+    },
+    windows: { update: async () => {}, getLastFocused: async () => ({ id: 1 }), WINDOW_ID_CURRENT: -2 },
     scripting: {
       executeScript: ({ target, func, args = [] }) => {
         if (args.some((a) => a === undefined)) throw new TypeError("Error at parameter 'injection': Value is unserializable.");

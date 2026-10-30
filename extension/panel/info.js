@@ -133,6 +133,31 @@ function browseToggle() {
       el("small", {}, "It can list and read your tabs, open links in a background tab, and load more YouTube comments. It never clicks or types. Links that haven't appeared in the chat ask first. Works with Claude Code and API-key models.")));
 }
 
+// ---------- tidy tabs ----------
+
+const TIDY_LEVELS = [
+  ["broad", "Broad", "A few big groups first (Dev, Video, Shopping…), then topics and sites."],
+  ["balanced", "Balanced", "Topics shared by several tabs, then sites, then kinds of site."],
+  ["specific", "Specific", "Only close matches: shared topics and same-site tabs."],
+];
+
+function tidySection() {
+  const bar = el("div", { class: "media-filter tidy-levels", role: "group", "aria-label": "How fine the groups are" });
+  const note = el("p", { class: "hint" });
+  const draw = () => {
+    const current = localStorage.getItem("tidyLevel") || "balanced";
+    bar.replaceChildren(...TIDY_LEVELS.map(([id, label]) =>
+      el("button", { type: "button", class: id === current ? "on" : "", "aria-pressed": String(id === current), onclick: () => (localStorage.setItem("tidyLevel", id), draw()) }, label)));
+    note.textContent = TIDY_LEVELS.find(([id]) => id === current)[2];
+  };
+  draw();
+  return [
+    el("p", { class: "hint" }, "⚡ → Tools → Tidy tabs sorts this window's loose tabs into named groups, worked out on this Mac from their titles and sites (no AI, no tokens). Pinned tabs, grouped tabs, and mail, calendar and chat stay where they are. Every tidy can be undone."),
+    bar,
+    note,
+  ];
+}
+
 // ---------- skills ----------
 
 function skillsSection() {
@@ -301,6 +326,7 @@ export function renderInfo(container, deps) {
       el("h3", {}, "Login providers"), ...loginsSection(deps)),
     section("skills", "Skills", ...skillsSection()),
     section("downloads", "PDFs & downloads", ...downloadsSection(deps)),
+    section("tidy", "Tidy tabs", ...tidySection()),
     section("guide", "Features & guide",
       el("dl", { class: "guide" }, ...GUIDE.flatMap(([t, d]) => [el("dt", {}, t), el("dd", {}, d)]))),
     section("about", "About",
