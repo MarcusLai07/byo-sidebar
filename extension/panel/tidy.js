@@ -231,7 +231,19 @@ export async function allowTidy({ page, site }) {
 async function windowTabs() {
   const win = await chrome.windows.getLastFocused({ windowTypes: ["normal"] });
   const [tabs, groups] = await Promise.all([chrome.tabs.query({ windowId: win.id }), chrome.tabGroups.query({ windowId: win.id })]);
+  if (await isDia(tabs)) throw new Error(DIA);
   return { win, tabs, groups };
+}
+
+// Dia puts every Space in the same window and gives extensions no way to tell them
+// apart, so grouping (or closing) "this window's" tabs reaches into your other Spaces
+// and pulls their tabs into this one. Until it does, the tab tools stay off in Dia.
+// Dia shows itself by its sidebar folders: tab groups that tabGroups doesn't list.
+const DIA = "Dia mixes every Space into one window for extensions, so this would move tabs between your Spaces. It's off in Dia.";
+async function isDia(tabs) {
+  if (/\bDia\//.test(navigator.userAgent)) return true;
+  const listed = new Set((await chrome.tabGroups.query({})).map((g) => g.id));
+  return tabs.some((t) => t.groupId !== -1 && !listed.has(t.groupId));
 }
 
 // Puts the planned groups in place; undo() puts every moved tab back where it was.
