@@ -97,7 +97,7 @@ Installed a CLI after Lumen? Run the install line again so the router finds it.
 - **Tidy tabs** (⚡ → Tools), worked out on your Mac with no AI and no tokens: sort loose tabs into named, colored groups by topic, group them by site, or close duplicates. Pinned and grouped tabs (Dia's sidebar folders included), mail, calendar and chat stay put, and every action can be undone. Dia's favorites look like ordinary tabs to extensions: right-click → Lumen → Never tidy this tab (or site), or ⓘ → Tidy tabs. Choose Broad, Balanced or Specific groups in ⓘ.
 - **Extensions manager** (🧩): every extension with on/off switches, options and remove.
 - **Attachments:** images, PDFs, text, a screenshot of the tab, or a recent download.
-- **Read-only browsing:** when it needs more, the AI can read your tabs and open links in the background. It never clicks or types, and asks before visiting links that came from nowhere.
+- **Read-only browsing:** when it needs more, the AI can read your tabs and open links in the background. It never clicks or types, and asks before visiting links that came from nowhere. Allow one page and the rest of that site opens without asking for the rest of the chat; sites you name yourself never ask.
 - **Saved chats:** searchable history; edit a question or regenerate an answer.
 - **Right-click → Lumen** on text or images, and `ai` + space in the address bar.
 - **Voice input**, light and dark glass themes, and motion that turns off with *Reduce motion*.

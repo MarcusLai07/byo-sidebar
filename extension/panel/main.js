@@ -7,7 +7,7 @@ import * as ctx from "./context.js";
 import * as skills from "./skills.js";
 import * as voice from "./voice.js";
 import { renderMarkdown } from "./markdown.js";
-import { createRunner, urlsIn } from "./tools.js";
+import { createRunner, siteOf, sitesIn, urlsIn } from "./tools.js";
 import { renderInfo } from "./info.js";
 import { renderHistory } from "./history.js";
 import { renderMedia } from "./saver.js";
@@ -404,7 +404,8 @@ function fillTools(box, msg) {
       row.textContent = `${t.label}${t.note ? ` · ${t.note}` : ""} ${mark}`;
       if (t.status === "asking" && t.answer) {
         const allow = document.createElement("button");
-        allow.textContent = "Allow";
+        allow.textContent = t.site ? `Allow ${t.site}` : "Allow";
+        allow.title = "Lets Lumen read any page on this site for the rest of this chat";
         allow.className = "primary";
         allow.addEventListener("click", () => t.answer(true));
         const deny = document.createElement("button");
@@ -833,12 +834,16 @@ async function respond(chat, userMsg, sourceTab, { retried = false } = {}) {
   // Read-only browsing: links already in the chat can be opened; others need approval.
   const browse = localStorage.getItem("browse") !== "off";
   const seen = new Set(chat.messages.flatMap((m) => urlsIn(m.role === "user" ? m.prompt : m.text)));
+  // Allowing one link allows its whole site for the rest of the chat, and sites you
+  // typed yourself (not page text sent along) never ask.
+  const sites = new Set([...(chat.sites || []), ...chat.messages.flatMap((m) => (m.role === "user" ? sitesIn(m.display) : []))]);
   const showTools = () => {
     fillTools(toolBox, msg);
     scrollDown();
   };
   const runTool = createRunner({
     seen,
+    sites,
     activity(label) {
       const t = { label, status: "running" };
       (msg.tools ??= []).push(t);
@@ -850,9 +855,11 @@ async function respond(chat, userMsg, sourceTab, { retried = false } = {}) {
     },
     approve(url) {
       return new Promise((resolve) => {
-        const t = { label: `Open ${url}?`, status: "asking" };
+        const site = siteOf(url);
+        const t = { label: `Open ${url}?`, status: "asking", site };
         t.answer = (ok) => {
-          Object.assign(t, { status: ok ? "done" : "failed", note: ok ? "allowed" : "not opened", answer: null });
+          if (ok) sites.add(site), (chat.sites = [...new Set([...(chat.sites || []), site])]);
+          Object.assign(t, { status: ok ? "done" : "failed", note: ok ? `${site} allowed for this chat` : "not opened", answer: null });
           showTools();
           resolve(ok);
         };
