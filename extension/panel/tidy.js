@@ -238,17 +238,47 @@ async function windowTabs() {
 async function apply(planned, win, tabs) {
   const before = new Map(tabs.map((t) => [t.id, { index: t.index, groupId: t.groupId }]));
   const moved = [];
+  let skipped = 0;
   for (const g of planned) {
-    const groupId = await chrome.tabs.group({ tabIds: g.tabIds, ...(g.groupId ? { groupId: g.groupId } : { createProperties: { windowId: win.id } }) });
-    if (!g.groupId) await chrome.tabGroups.update(groupId, { title: g.title, color: colorFor(g.title), collapsed: false });
-    moved.push(...g.tabIds);
+    const add = (tabIds, groupId) => chrome.tabs.group({ tabIds, ...(groupId ? { groupId } : { createProperties: { windowId: win.id } }) });
+    let groupId = g.groupId;
+    let ok = g.tabIds;
+    try {
+      groupId = await add(g.tabIds, groupId);
+    } catch {
+      // Dia lists some tabs it then can't find ("Tab not found for session ID"), and one
+      // of them fails the whole call: add the tabs one by one and skip those.
+      ok = [];
+      for (const id of g.tabIds) {
+        try {
+          groupId = await add([id], groupId);
+          ok.push(id);
+        } catch {
+          skipped++;
+        }
+      }
+    }
+    if (!ok.length) continue;
+    if (!g.groupId) await chrome.tabGroups.update(groupId, { title: g.title, color: colorFor(g.title), collapsed: false }).catch(() => {});
+    g.tabIds = ok;
+    g.done = true;
+    moved.push(...ok);
   }
-  return async () => {
+  const undo = async () => {
     await chrome.tabs.ungroup(moved).catch(() => {});
     for (const id of [...moved].sort((a, b) => before.get(a).index - before.get(b).index)) {
       await chrome.tabs.move(id, { index: before.get(id).index }).catch(() => {});
     }
   };
+  return { undo: moved.length ? undo : null, skipped };
+}
+
+// "Tidied 5 tabs: Reddit (2), …", noting tabs the browser wouldn't move.
+function report(verb, planned, { undo, skipped }) {
+  const done = planned.filter((g) => g.done);
+  const n = done.reduce((s, g) => s + g.tabIds.length, 0);
+  const skip = skipped ? ` ${skipped} tab${skipped > 1 ? "s" : ""} couldn't be moved (Dia can't reach sleeping tabs; open them once and try again).` : "";
+  return { summary: n ? `${verb} ${n} tabs: ${describe(done)}.${skip}` : `Couldn't group any tabs.${skip}`, undo };
 }
 
 const describe = (planned) =>
@@ -258,9 +288,7 @@ export async function tidy(level = "balanced") {
   const { win, tabs, groups } = await windowTabs();
   const planned = plan(tabs, groups, level, await keptCheck());
   if (!planned.length) return { summary: "Nothing to tidy: no loose tabs share a topic or site." };
-  const undo = await apply(planned, win, tabs);
-  const n = planned.reduce((s, g) => s + g.tabIds.length, 0);
-  return { summary: `Tidied ${n} tabs: ${describe(planned)}`, undo };
+  return report("Tidied", planned, await apply(planned, win, tabs));
 }
 
 export async function bySite() {
@@ -274,8 +302,7 @@ export async function bySite() {
   }
   const planned = [...sites].filter(([, ids]) => ids.length >= 2).map(([site, tabIds]) => ({ title: siteName(site), tabIds }));
   if (!planned.length) return { summary: "No site has more than one loose tab." };
-  const undo = await apply(planned, win, tabs);
-  return { summary: `Grouped by site: ${describe(planned)}`, undo };
+  return report("Grouped", planned, await apply(planned, win, tabs));
 }
 
 // The same page twice: same address, ignoring #anchors and a trailing slash.

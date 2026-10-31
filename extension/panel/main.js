@@ -537,7 +537,7 @@ async function runInstant(action) {
 
 // Tab tidying (tidy.js): the result in a toast, with Undo when something changed.
 async function runTidy(fn) {
-  const { summary, undo } = await fn();
+  const { summary, undo } = await fn().catch((e) => ({ summary: `Couldn't tidy: ${e.message}` }));
   toast(summary, undo && { label: "Undo", run: async () => (await undo(), toast("Undone.")) });
 }
 

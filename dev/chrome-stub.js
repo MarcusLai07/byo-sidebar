@@ -218,6 +218,9 @@
       },
       // Tab groups, roughly like the browser: grouping moves tabs next to each other.
       group: async ({ tabIds, groupId, createProperties }) => {
+        // Like Dia with a sleeping tab: ?tidy&sleeping makes one tab unreachable.
+        const asleep = tabIds.find((tid) => tid === window.__sleeping);
+        if (asleep) throw new Error(`Tab not found for session ID: TabSessionID(value: ${asleep})`);
         const id = groupId ?? 200 + groups.length;
         if (groupId == null) groups.push({ id, title: "", color: "grey", windowId: createProperties?.windowId ?? 1 });
         const moving = tabIds.map((tid) => tabs.find((t) => t.id === tid));
